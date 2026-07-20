@@ -14,6 +14,7 @@ from klustra.core.errors import (
     SourceNotFoundError,
     StateStoreError,
 )
+from klustra.core.file_state_store import FileStateStore, RunLogEntry
 from klustra.core.knowledge_unit import KnowledgeUnit
 from klustra.core.page import ClusterMeta, Page
 from klustra.core.source_ref import SourceRef
@@ -34,6 +35,8 @@ __all__ = [
     "PageNotFoundError",
     "SourceNotFoundError",
     "StateStoreError",
+    "FileStateStore",
+    "RunLogEntry",
     "KnowledgeUnit",
     "ClusterMeta",
     "Page",
