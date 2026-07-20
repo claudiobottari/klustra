@@ -20,3 +20,11 @@ class SourceNotFoundError(StateStoreError):
 
 class PageNotFoundError(StateStoreError):
     """No page record exists for the given entity_id."""
+
+
+class TranslatorNotFoundError(KlustraError):
+    """No translator registered for the given file extension or URI scheme."""
+
+
+class ConnectorNotFoundError(KlustraError):
+    """No connector registered for the given source type."""

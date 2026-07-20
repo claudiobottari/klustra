@@ -14,6 +14,7 @@ class SourceRecord(BaseModel):
 
     source_id: str
     source_path: str
+    sha256: str = ""
     translator: str | None = None
     status: SourceStatus = "active"
     created_at: datetime
