@@ -6,6 +6,7 @@ Adding a new translator:
 """
 
 from klustra.ingestion.translator_registry import TranslatorRegistry
+from klustra.translators.excel import ExcelTranslator
 from klustra.translators.markdown import MarkdownTranslator
 from klustra.translators.text import TextTranslator
 
@@ -15,4 +16,5 @@ def build_default_registry() -> TranslatorRegistry:
     reg = TranslatorRegistry()
     reg.register(MarkdownTranslator())
     reg.register(TextTranslator())
+    reg.register(ExcelTranslator())
     return reg
