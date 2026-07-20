@@ -1,0 +1,5 @@
+This is a plain text file.
+It contains multiple lines of content.
+No markdown headings, no structure — just prose.
+
+A second paragraph with more detail.
