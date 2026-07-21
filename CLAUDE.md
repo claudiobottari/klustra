@@ -66,6 +66,7 @@ klustra/cli.py        typer CLI — thin wrapper over api.py, no logic here
 6. **`validate` ≠ `lint`.** Conformance (OKF §9) never fails on broken links or missing optional fields. Quality gates live in lint config. Don't mix them.
 7. **No bloat.** No speculative abstractions, no "manager" classes wrapping one function, no comments narrating obvious code. If a docstring restates the signature, delete it. Straight to the point — this is a project value, not a style preference.
 8. **Token accounting is not optional.** Any new LLM call site must report {role, tokens_in, tokens_out} through `llm/accounting`. A call that doesn't show up in `klustra stats` is a leak.
+9. **OpenRouter third-party models treat `strict: true` as best-effort — always enforce bounds both in JSON schema AND in the system prompt; pydantic is the final gate, not the schema.**
 
 ## Conventions
 
