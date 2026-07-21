@@ -1,0 +1,1 @@
+Antioxidant packages are specialized additive formulations used in [[xlpe.insulation]] for high-voltage cable systems. They are a key component of [[super.clean.xlpe.compound]]s. Modern XLPE compounds that incorporate antioxidant packages are reported to achieve design lifetimes exceeding 40 years.^[392adbd3c4ad7a29]

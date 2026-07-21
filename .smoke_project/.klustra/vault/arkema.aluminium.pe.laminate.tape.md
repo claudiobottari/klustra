@@ -1,0 +1,1 @@
+Arkema supplies an aluminium-PE laminate tape approved for use as a radial moisture barrier in high-voltage cable sheathing systems. The tape is listed among approved sheathing components alongside ExxonMobil's HDPE compound, indicating it is intended to provide a moisture barrier layer in cable construction.^[66fee6e56f742178]

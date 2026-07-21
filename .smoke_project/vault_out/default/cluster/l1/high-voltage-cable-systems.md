@@ -2,40 +2,81 @@
 type: cluster
 level: 1
 entity_id: default.cluster.l1.high-voltage-cable-systems
-title: 'High-Voltage Cable Systems: Components, Applications, and Deployment'
+title: 'High-Voltage Cable Systems: Design, Materials, Installation, and Testing'
 domain: default
 confidence: 0.8
 schema_version: '1.0'
-description: This cluster synthesizes the architecture, materials, and installation
-  environments of high-voltage cable systems, from core components to specialized
-  applications like underground urban networks and offshore wind farms.
+description: This cluster covers the complete lifecycle of high-voltage cable systems,
+  from materials and manufacturing to installation, testing, and degradation mechanisms,
+  centered on XLPE-insulated cables for power transmission up to 500 kV.
 tags:
 - high-voltage cables
-- power transmission
 - XLPE insulation
+- cable installation
+- cable testing
+- power transmission
 - cable components
-- underground networks
-- submarine cables
 children:
-- high_voltage_cable_systems
-- cross_linked_polyethylene_insulation
-- cable_core
-- semi_conductive_screen
-- metallic_sheath
-- outer_protective_jacket
-- underground_urban_networks
-- submarine_crossings
-- offshore_wind_farms
+- high-voltage.cable.systems
+- xlpe.insulation
+- copper.conductor
+- aluminium.conductor
+- semi-conductive.screen
+- metallic.sheath
+- outer.protective.jacket
+- underground.urban.networks
+- submarine.crossings
+- offshore.wind.farm.connections
+- bending.radii
+- installation.minimum.bending.radius
+- installation.maximum.pulling.tension
+- installation.temperature
+- installation.duct.installation
+- installation.cable.lubricant
+- installation.cable.winch
+- installation.direct.burial
+- installation.trench.depth
+- installation.sand.bedding
+- installation.warning.tape
+- installation.jointing
+- installation.prefabricated.joints
+- installation.joint.bay.dimensions
+- iec.61936-1
+- approved.supplier.list.hv.cable.components
+- norsk.hydro.aluminium.rod
+- aurubis.ag.copper.rod
+- borealis.visico.le4253.xlpe.compound
+- dow.chemical.hfda-4202.ec.xlpe.compound
+- exxonmobil.hdpe.compound.moisture.barrier
+- arkema.aluminium.pe.laminate.tape
+- prysmian.pre-moulded.joints.terminations
+- nkt.cold-shrink.joints.66-170.kv
+- iec.62067
+- cable.testing.type_testing
+- cable.testing.routine_testing
+- cable.testing.after_installation_testing
+- cable.testing.high_voltage_withstand_test
+- cable.testing.partial_discharge_measurement
+- cable.testing.conductor_resistance_check
+- cable.testing.dc_vlf_withstand_testing
+- cable.testing.sheath_integrity_test
+- cable.testing.joint_resistance_measurement
+- water.treeing
+- electrical.treeing
+- triple.extrusion.process
+- peroxide.crosslinking
+- super.clean.xlpe.compound
+- antioxidant.package
 cluster_meta:
   algo: hdbscan
   run_id: default.cluster.l1.high-voltage-cable-systems
   cohesion: 0.7
-created_at: '2026-07-21T10:10:27.339400+00:00'
-updated_at: '2026-07-21T10:10:27.339400+00:00'
+created_at: '2026-07-21T23:18:00.781290+00:00'
+updated_at: '2026-07-21T23:18:00.781290+00:00'
 ---
 
-The [[high_voltage_cable_systems]] cluster brings together the fundamental building blocks and real-world deployments of modern power transmission cables. At the heart of these systems lies the [[cable_core]], which combines a conductor with [[cross_linked_polyethylene_insulation]] (XLPE) to enable efficient, high-capacity energy transfer. Surrounding the core, critical layers such as the [[semi_conductive_screen]] and [[metallic_sheath]] manage electric field grading, water blocking, and mechanical protection, while the [[outer_protective_jacket]] provides the final barrier against environmental and physical damage.
+This cluster covers the complete lifecycle of [[high-voltage.cable.systems]], from materials and manufacturing to installation, testing, and degradation mechanisms, centered on XLPE-insulated cables for power transmission up to 500 kV. The core system relies on [[xlpe.insulation]] produced via [[peroxide.crosslinking]] in a [[triple.extrusion.process]] that simultaneously applies [[semi-conductive.screen]] layers. Conductor options include [[copper.conductor|copper]] and [[aluminium.conductor|aluminium]], while the cable is protected by a [[metallic.sheath]] and an [[outer.protective.jacket]]. Modern insulation compounds use [[super.clean.xlpe.compound]] with an [[antioxidant.package]] to mitigate [[water.treeing]] and [[electrical.treeing]] degradation.
 
-These components are assembled into cable systems tailored for distinct environments. In densely populated areas, [[underground_urban_networks]] rely on robust XLPE-insulated cables to replace overhead lines, ensuring reliability and safety. For renewable energy integration, [[offshore_wind_farms]] depend on [[submarine_crossings]] to transmit power from sea-based turbines to onshore grids, where the same layered cable design must withstand extreme underwater conditions.
+Installation practices are critical for system reliability. Key parameters include [[bending.radii]] (specified as [[installation.minimum.bending.radius]]), [[installation.maximum.pulling.tension]], and [[installation.temperature]] minima. Methods range from [[installation.duct.duct installation]] (using [[installation.cable.lubricant]] and [[installation.cable.winch|cable winches]]) to [[installation.direct.burial]] (with [[installation.trench.depth]], [[installation.sand.bedding]], and [[installation.warning.tape]]). Jointing follows strict procedures using [[installation.prefabricated.joints]] and [[installation.joint.bay.dimensions]], as detailed in [[installation.jointing]]. These cables serve [[underground.urban.networks]], [[submarine.crossings]], and [[offshore.wind.farm.connections]].
 
-Together, these members illustrate a cohesive engineering domain: the design and application of high-voltage cable systems. The interplay between standardized components (core, screens, sheaths, jackets) and specialized installations (urban, submarine) highlights how a common technological foundation adapts to diverse operational demands, from city streets to ocean floors.
+Quality assurance is governed by international standards [[iec.61936-1]] and [[iec.62067]]. Testing encompasses [[cable.testing.type_testing|type testing]] (design validation), [[cable.testing.routine_testing|routine testing]] (factory tests including [[cable.testing.high_voltage_withstand_test]], [[cable.testing.partial_discharge_measurement]], and [[cable.testing.conductor_resistance_check]]), and [[cable.testing.after_installation_testing|after-installation testing]] ([[cable.testing.dc_vlf_withstand_testing|DC VLF withstand]], [[cable.testing.sheath_integrity_test|sheath integrity]], and [[cable.testing.joint_resistance_measurement|joint resistance]]). Approved materials and accessories are listed in the [[approved.supplier.list.hv.cable.components]], including [[norsk.hydro.aluminium.rod]], [[aurubis.ag.copper.rod]], [[borealis.visico.le4253.xlpe.compound]], [[dow.chemical.hfda-4202.ec.xlpe.compound]], [[exxonmobil.hdpe.compound.moisture.barrier]], [[arkema.aluminium.pe.laminate.tape]], [[prysmian.pre-moulded.joints.terminations]], and [[nkt.cold-shrink.joints.66-170.kv]].

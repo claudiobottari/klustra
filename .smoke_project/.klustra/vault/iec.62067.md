@@ -1,0 +1,88 @@
+## Overview
+
+IEC 62067 is an international standard that specifies testing requirements for power cable systems with extruded insulation for rated voltages above 150 kV (Um = 170 kV) up to 500 kV (Um = 550 kV). The standard covers type testing, routine testing, and after-installation testing to ensure the reliability and performance of high-voltage cable systems.
+
+## Testing Categories
+
+### Type Testing
+
+Type tests per IEC 62067 validate the cable system design. These tests are performed on a representative sample of the cable system to demonstrate that the design meets the required performance levels. The type tests include:
+
+- **Electrical tests**: withstand voltage test, partial discharge measurement, and tan delta measurement
+- **Mechanical tests**: bending test and tensile test
+- **Thermal tests**: load cycling at rated and emergency temperature
+
+^[362871cd3841da0e:section:Cable Testing Standards]
+
+### Routine Testing
+
+Routine tests are performed on every manufactured cable length to ensure consistent quality. The routine tests specified in IEC 62067 include:
+
+1. High-voltage withstand test at 2.5 U0 for 30 minutes
+2. Partial discharge measurement with a threshold of less than 5 pC
+3. Conductor resistance check
+
+^[362871cd3841da0e:section:Cable Testing Standards]
+
+### After-Installation Testing
+
+After installation, on-site commissioning tests are conducted to verify the integrity of the installed cable system. These tests include:
+
+- DC or VLF withstand testing
+- Sheath integrity test (10 kV DC for 1 minute)
+- Joint resistance measurement
+
+^[362871cd3841da0e:section:Cable Testing Standards]
+
+## Related Standards and Practices
+
+IEC 62067 is closely related to other standards and practices in high-voltage cable systems, including:
+
+- [[iec.61936-1]] for power installations exceeding 1 kV AC
+- [[local.electrical.safety.regulations]] and [[company.specific.safety.procedures]] for safe work practices
+- [[cable.testing.type_testing]], [[cable.testing.routine_testing]], and [[cable.testing.after_installation_testing]] for detailed testing procedures
+- [[cable.testing.high_voltage_withstand_test]], [[cable.testing.partial_discharge_measurement]], [[cable.testing.conductor_resistance_check]], [[cable.testing.dc_vlf_withstand_testing]], [[cable.testing.sheath_integrity_test]], and [[cable.testing.joint_resistance_measurement]] for specific test methods
+
+## Components and Materials
+
+Cable systems covered by IEC 62067 typically include:
+
+- [[high-voltage.cable.systems]] with [[xlpe.insulation]]
+- [[copper.conductor]] or [[aluminium.conductor]]
+- [[semi-conductive.screen]], [[metallic.sheath]], and [[outer.protective.jacket]]
+- Materials such as [[borealis.visico.le4253.xlpe.compound]], [[dow.chemical.hfda-4202.ec.xlpe.compound]], [[exxonmobil.hdpe.compound.moisture.barrier]], and [[arkema.aluminium.pe.laminate.tape]]
+
+## Installation Considerations
+
+Installation of cables covered by IEC 62067 must consider:
+
+- [[bending.radii]] and [[installation.minimum.bending.radius]]
+- [[installation.maximum.pulling.tension]] and [[installation.temperature]]
+- [[installation.duct.installation]], [[installation.cable.lubricant]], and [[installation.cable.winch]]
+- [[installation.direct.burial]], [[installation.trench.depth]], [[installation.sand.bedding]], and [[installation.warning.tape]]
+- [[installation.jointing]], [[installation.prefabricated.joints]], and [[installation.joint.bay.dimensions]]
+
+## Safety
+
+Safety during testing and installation is governed by:
+
+- [[cable.isolation.and.earthing]], [[voltage.absence.verification]], and [[safety.locks.and.tags]]
+- [[safe.work.zone.with.barriers]] and [[exclusion.zone.for.cable.fault]]
+- [[fault.re-energization.prohibition]] and [[control.centre.reporting]]
+
+## Applications
+
+Cable systems tested to IEC 62067 are used in:
+
+- [[underground.urban.networks]]
+- [[submarine.crossings]]
+- [[offshore.wind.farm.connections]]
+
+## Storia e revisioni
+
+No conflicting claims were identified in the source material.
+
+## References
+
+- IEC 62067: Power cables with extruded insulation and their accessories for rated voltages above 150 kV (Um = 170 kV) up to 500 kV (Um = 550 kV) — Test methods and requirements
+- Source: 362871cd3841da0e (Cable Testing Standards section)
