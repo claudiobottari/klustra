@@ -1,0 +1,23 @@
+Cable Installation Guide
+
+General Requirements:
+Minimum bending radius during installation is 20x cable outer diameter.
+Maximum pulling tension must not exceed 50 N/mm2 on the conductor.
+Installation temperature must be above 0 degrees Celsius.
+
+Duct Installation:
+- Clean and inspect all ducts before pulling
+- Apply cable lubricant compatible with the outer sheath material
+- Use a cable winch with tension monitoring
+- Install at a steady rate of 5-10 m/min
+
+Direct Burial:
+- Trench depth minimum 800 mm for urban, 1200 mm for rural
+- Sand bedding layer of 100 mm below and above cable
+- Warning tape placed 300 mm above cable
+- Backfill with compacted excavated material
+
+Jointing:
+All joints must be installed in a controlled environment.
+Prefabricated joints are preferred for faster installation.
+Joint bays require minimum dimensions of 3 m x 1.5 m.
