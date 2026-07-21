@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
+import openai
+
+from klustra.core.config import LLMRoleConfig
+from klustra.core.errors import ConfigError, LLMKeyMissingError
+
 
 class EmbeddingProvider(ABC):
     """ABC for text embedding providers (SPEC §6.1).
@@ -15,6 +20,45 @@ class EmbeddingProvider(ABC):
     def embed(self, texts: list[str]) -> list[list[float]]:
         """Return one embedding vector per input text."""
         ...
+
+
+class OpenAIEmbeddingProvider(EmbeddingProvider):
+    """Concrete EmbeddingProvider backed by the OpenAI embeddings API (SPEC §8, §12)."""
+
+    def __init__(
+        self,
+        api_key: str,
+        model: str = "text-embedding-3-small",
+        base_url: str | None = None,
+    ) -> None:
+        self.model = model
+        self._client = openai.OpenAI(api_key=api_key, base_url=base_url)
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        response = self._client.embeddings.create(model=self.model, input=texts)
+        return [item.embedding for item in response.data]
+
+
+def resolve_embedding_provider(cfg: LLMRoleConfig) -> EmbeddingProvider:
+    """Build a concrete EmbeddingProvider from an [llm.embeddings] config section.
+
+    Secrets stay in env only (SPEC §12) — resolved via resolve_api_key, never read
+    from klustra.toml. Raises LLMKeyMissingError (not a silent None) if the env var
+    for the configured provider is unset.
+    """
+    from klustra.core.config import resolve_api_key
+
+    if cfg.provider != "openai":
+        raise ConfigError(
+            f"Unsupported embeddings provider {cfg.provider!r} — only 'openai' is implemented"
+        )
+
+    key = resolve_api_key(cfg.provider)
+    if not key:
+        raise LLMKeyMissingError(
+            "No API key for embeddings provider 'openai'. Set OPENAI_API_KEY environment variable."
+        )
+    return OpenAIEmbeddingProvider(api_key=key, model=cfg.model, base_url=cfg.base_url)
 
 
 class EmbeddingCache:

@@ -35,7 +35,11 @@ from klustra.hierarchy.context import (
 from klustra.hierarchy.context import (
     search as search_fn,
 )
-from klustra.hierarchy.embeddings import EmbeddingCache, EmbeddingProvider
+from klustra.hierarchy.embeddings import (
+    EmbeddingCache,
+    EmbeddingProvider,
+    resolve_embedding_provider,
+)
 from klustra.hierarchy.incremental import (
     IncrementalConfig,
     IncrementalResult,
@@ -99,12 +103,18 @@ class Klustra:
 
     @property
     def embedding_provider(self) -> EmbeddingProvider:
-        if self._embedding_provider is None:
+        if self._embedding_provider is not None:
+            return self._embedding_provider
+        cfg = self.config.llm.embeddings
+        if cfg is None:
             from klustra.core.errors import ConfigError
 
             raise ConfigError(
-                "embedding_provider is required for hierarchy operations — pass one to Klustra(...)"
+                "llm.embeddings config is required for hierarchy operations — "
+                "add an [llm.embeddings] section to klustra.toml or pass "
+                "embedding_provider to Klustra(...)"
             )
+        self._embedding_provider = resolve_embedding_provider(cfg)
         return self._embedding_provider
 
     # --- Ingestion ---
