@@ -1,4 +1,4 @@
-uv init{
+{
   "hooks": {
     "PostToolUse": [
       {
