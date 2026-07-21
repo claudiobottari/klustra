@@ -5,7 +5,7 @@ from typing import Any
 
 import openai
 
-from klustra.core.errors import LLMCallError, LLMValidationError
+from klustra.core.errors import LLMCallError, LLMEmptyCompletionError, LLMValidationError
 from klustra.llm.provider import LLMProvider, LLMRequest, LLMResponse
 from klustra.llm.retry import llm_retry
 
@@ -60,7 +60,10 @@ class OpenAICompatibleProvider(LLMProvider):
             raise LLMCallError(f"OpenAI connection error: {exc}") from exc
 
         choice = completion.choices[0]
-        content = choice.message.content or ""
+        raw = choice.message.content
+        if raw is None or not raw.strip():
+            raise LLMEmptyCompletionError(f"Model {request.model} returned empty completion")
+        content = raw
         usage = completion.usage
         tokens_in = usage.prompt_tokens if usage else 0
         tokens_out = usage.completion_tokens if usage else 0

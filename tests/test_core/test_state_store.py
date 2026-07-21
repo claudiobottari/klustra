@@ -2,7 +2,7 @@ from typing import Any
 
 import pytest
 
-from klustra.core.state_store import PageRecord, SourceRecord, StateStore
+from klustra.core.state_store import HierarchyStateRecord, PageRecord, SourceRecord, StateStore
 
 
 class InMemoryStateStore(StateStore):
@@ -13,6 +13,7 @@ class InMemoryStateStore(StateStore):
         self._pages: dict[str, PageRecord] = {}
         self._links: dict[str, list[str]] = {}
         self._runs: list[tuple[str, dict[str, Any]]] = []
+        self._hierarchy: HierarchyStateRecord | None = None
 
     def get_source(self, source_id: str) -> SourceRecord | None:
         return self._sources.get(source_id)
@@ -46,6 +47,12 @@ class InMemoryStateStore(StateStore):
 
     def append_run(self, run_id: str, record: dict[str, Any]) -> None:
         self._runs.append((run_id, record))
+
+    def get_hierarchy_state(self) -> HierarchyStateRecord | None:
+        return self._hierarchy
+
+    def put_hierarchy_state(self, record: HierarchyStateRecord, *, run_id: str) -> None:
+        self._hierarchy = record
 
 
 def test_state_store_is_abstract():

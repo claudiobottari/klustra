@@ -1,12 +1,13 @@
 import os
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from klustra.core.errors import StateStoreError
-from klustra.core.state_store import PageRecord, SourceRecord, StateStore
+from klustra.core.state_store import HierarchyStateRecord, PageRecord, SourceRecord, StateStore
 
 
 class RunLogEntry(BaseModel):
@@ -23,6 +24,7 @@ class _StateDocument(BaseModel):
     pages: dict[str, PageRecord] = Field(default_factory=dict)
     links: dict[str, list[str]] = Field(default_factory=dict)
     runs: list[RunLogEntry] = Field(default_factory=list)
+    hierarchy: HierarchyStateRecord | None = None
 
 
 class FileStateStore(StateStore):
@@ -53,7 +55,18 @@ class FileStateStore(StateStore):
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 f.write(data)
-            tmp_path.replace(self.state_path)
+            # Windows: another process (antivirus, indexer) may briefly hold a handle to
+            # the freshly-written tmp file, causing os.replace to raise PermissionError.
+            last_err: OSError | None = None
+            for attempt in range(5):
+                try:
+                    tmp_path.replace(self.state_path)
+                    return
+                except PermissionError as exc:
+                    last_err = exc
+                    time.sleep(0.02 * (2**attempt))
+            if last_err is not None:
+                raise last_err
         except BaseException:
             tmp_path.unlink(missing_ok=True)
             raise
@@ -112,3 +125,11 @@ class FileStateStore(StateStore):
     def list_runs(self) -> list[RunLogEntry]:
         """Not part of the StateStore ABC — the ABC has no run-log reader."""
         return list(self._doc.runs)
+
+    def get_hierarchy_state(self) -> HierarchyStateRecord | None:
+        return self._doc.hierarchy
+
+    def put_hierarchy_state(self, record: HierarchyStateRecord, *, run_id: str) -> None:
+        self._doc.hierarchy = record
+        self._log(run_id, "put_hierarchy_state", record_run_id=record.run_id)
+        self._flush()

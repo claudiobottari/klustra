@@ -42,6 +42,10 @@ class LLMCallError(LLMError):
     """Network or API call failed after all retries."""
 
 
+class LLMEmptyCompletionError(LLMCallError):
+    """Model returned an empty or whitespace-only completion — treated as transient."""
+
+
 class LLMValidationError(LLMError):
     """LLM response did not conform to the expected JSON schema."""
 

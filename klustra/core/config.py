@@ -1,6 +1,7 @@
 import os
 import tomllib
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -37,6 +38,20 @@ class LintConfig(BaseModel):
     promote_to_error: list[str] = Field(default_factory=list)
 
 
+class HierarchySettings(BaseModel):
+    """Hierarchy build knobs (SPEC §6)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    mode: Literal["hard", "soft"] = "hard"
+    min_cluster_size: int = 4
+    home_threshold: int = 5
+    probability_threshold: float = 0.5
+    materiality_threshold: float = Field(default=0.10, ge=0.0, le=1.0)
+    drift_threshold_percent: float = Field(default=0.30, ge=0.0, le=1.0)
+    stability_threshold: float = Field(default=0.6, ge=0.0, le=1.0)
+
+
 class KlustraConfig(BaseModel):
     """Parsed klustra.toml (SPEC §12). Secrets stay in env — see resolve_api_key()."""
 
@@ -44,6 +59,7 @@ class KlustraConfig(BaseModel):
 
     llm: LLMConfig = Field(default_factory=LLMConfig)
     lint: LintConfig = Field(default_factory=LintConfig)
+    hierarchy: HierarchySettings = Field(default_factory=HierarchySettings)
 
 
 def load_config(path: Path | str = Path("klustra.toml")) -> KlustraConfig:

@@ -114,6 +114,9 @@ def persist_librarian_result(
         source_ids=source_ids,
         level=result.page.level,
         content_hash=content_hash,
+        title=result.page.title,
+        description=result.page.description,
+        tags=list(result.page.tags),
     )
     store.put_page(record, run_id=run_id)
     store.set_links(result.page.entity_id, result.link_targets, run_id=run_id)
@@ -136,7 +139,9 @@ def _build_request(
         "3. Use ONLY wikilinks from the provided entity index: [[entity_id]]. "
         "NEVER invent link targets.\n"
         "4. Write a coherent synthesis, not a list of per-source summaries.\n"
-        "5. A page without citations will be REJECTED."
+        "5. A page without citations will be REJECTED.\n"
+        "6. confidence: a number in [0.0, 1.0] representing your certainty "
+        "in this synthesis — do NOT use a 1\u201310 scale."
     )
 
     parts: list[str] = [f"## Entity: {entity_id}\n"]

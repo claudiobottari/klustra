@@ -1,0 +1,88 @@
+"""klustra.hierarchy — RAPTOR-style recursive clustering (SPEC §6-§7)."""
+
+from klustra.hierarchy.clustering import (
+    ClusterAssignment,
+    ClusterResult,
+    PageInput,
+    cluster_pages,
+)
+from klustra.hierarchy.context import (
+    AncestorInfo,
+    ConceptContext,
+    NavigateResult,
+    PageSummary,
+    SearchHit,
+    build_parent_map,
+    context,
+    navigate,
+    search,
+)
+from klustra.hierarchy.embeddings import EmbeddingCache, EmbeddingProvider
+from klustra.hierarchy.incremental import (
+    IncrementalConfig,
+    IncrementalResult,
+    JudgeResult,
+    MaterialityResult,
+    check_materiality,
+    cosine_distance,
+    judge_cluster,
+    run_incremental,
+    should_full_rebuild,
+)
+from klustra.hierarchy.pages import (
+    HierarchyConfig,
+    HierarchyNode,
+    HierarchyResult,
+    build_hierarchy,
+    synthesize_cluster_page,
+    synthesize_home_page,
+)
+from klustra.hierarchy.stability import (
+    ClusterMatch,
+    NewCluster,
+    OldCluster,
+    StabilityResult,
+    jaccard_similarity,
+    match_clusters,
+    resolve_superseded,
+)
+
+__all__ = [
+    "AncestorInfo",
+    "ClusterAssignment",
+    "ClusterMatch",
+    "ClusterResult",
+    "ConceptContext",
+    "EmbeddingCache",
+    "EmbeddingProvider",
+    "HierarchyConfig",
+    "HierarchyNode",
+    "HierarchyResult",
+    "IncrementalConfig",
+    "IncrementalResult",
+    "JudgeResult",
+    "MaterialityResult",
+    "NavigateResult",
+    "NewCluster",
+    "OldCluster",
+    "PageInput",
+    "PageSummary",
+    "SearchHit",
+    "StabilityResult",
+    "build_hierarchy",
+    "build_parent_map",
+    "check_materiality",
+    "cluster_pages",
+    "context",
+    "cosine_distance",
+    "jaccard_similarity",
+    "judge_cluster",
+    "match_clusters",
+    "navigate",
+    "resolve_superseded",
+    "run_incremental",
+    "search",
+    "should_full_rebuild",
+    "synthesize_cluster_page",
+    "synthesize_home_page",
+]

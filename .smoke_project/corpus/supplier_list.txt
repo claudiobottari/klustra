@@ -1,0 +1,17 @@
+Approved Supplier List - HV Cable Components
+
+Conductor:
+- Norsk Hydro (aluminium rod, certified to IEC 60228)
+- Aurubis AG (copper rod, oxygen-free, certified to EN 13601)
+
+Insulation Compound:
+- Borealis (Visico LE4253, peroxide-crosslinkable XLPE)
+- Dow Chemical (HFDA-4202 EC, extra-clean XLPE compound)
+
+Sheathing:
+- ExxonMobil (HDPE compound for radial moisture barrier)
+- Arkema (aluminium-PE laminate tape)
+
+Accessories:
+- Prysmian (pre-moulded joints and terminations, IEC type-tested)
+- NKT (cold-shrink joints for 66-170 kV range)

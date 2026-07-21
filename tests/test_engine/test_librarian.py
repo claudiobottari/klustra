@@ -320,6 +320,39 @@ class TestWikilinkResolution:
 
         assert "nonexistent.thing" not in result.link_targets
 
+    def test_librarian_routes_wikilinks_through_resolver(self) -> None:
+        """CLAUDE.md hard rule #2: resolver is the sole component gating link_targets.
+
+        - Valid wikilinks appear in link_targets.
+        - Invalid wikilinks are dropped from link_targets.
+        - Body markdown is NOT rewritten by librarian (resolver doesn't strip either —
+          downstream lint reports unresolved links; librarian passes body through unchanged).
+        """
+        contributions = [
+            _make_contribution("src001", "/a.md", ["Content."]),
+        ]
+        body = (
+            "Uses [[mat.xlpe]] insulation and [[proc.extrusion]] process, "
+            "with a broken ref to [[bogus.made-up]]. ^[src001:doc:1]"
+        )
+        provider = _provider_with_canned(contributions, _canned_librarian_output(body_md=body))
+        sink = ListSink()
+
+        result = merge_and_generate(
+            entity_id="prod.cable.p-laser-320kv",
+            contributions=contributions,
+            existing_index=["mat.xlpe", "proc.extrusion"],
+            domain="test",
+            provider=provider,
+            model="test-model",
+            sink=sink,
+        )
+
+        assert set(result.link_targets) == {"mat.xlpe", "proc.extrusion"}
+        assert "bogus.made-up" not in result.link_targets
+        assert "[[bogus.made-up]]" in result.body_md
+        assert "[[mat.xlpe]]" in result.body_md
+
 
 class TestPersistResult:
     def test_persist_writes_to_store(self) -> None:

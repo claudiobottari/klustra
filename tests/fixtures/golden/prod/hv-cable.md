@@ -2,10 +2,15 @@
 type: concept
 level: 0
 entity_id: prod.hv-cable
-title: prod.hv-cable
+title: HV Cable System
 domain: default
 confidence: 0.5
 schema_version: '1.0'
+description: High-voltage cable system for underground power transmission.
+tags:
+- cable
+- hv
+- power-transmission
 sources:
 - source_id: 8ca6e137d6f312bc
   source_path: CORPUS/cable_intro.md
@@ -25,7 +30,7 @@ updated_at: '2025-01-15T12:00:00.000000+00:00'
 
 High-voltage cable systems are critical infrastructure for power transmission, operating at voltages up to 500 kV. ^[8ca6e137d6f312bc:doc:1]
 
-The cable core uses a copper or aluminium conductor with [mat.xlpe](../mat/xlpe.md) insulation. ^[8ca6e137d6f312bc:doc:1]
+The cable core uses a copper or aluminium conductor with [XLPE Insulation](../mat/xlpe.md) insulation. ^[8ca6e137d6f312bc:doc:1]
 
 ## Project Status
 

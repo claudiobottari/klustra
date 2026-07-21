@@ -2,10 +2,14 @@
 type: concept
 level: 0
 entity_id: proc.installation
-title: proc.installation
+title: Cable Installation
 domain: default
 confidence: 0.5
 schema_version: '1.0'
+description: Installation procedures and requirements for HV cables.
+tags:
+- installation
+- construction
 sources:
 - source_id: 7d66d85bd5f00d45
   source_path: CORPUS/installation_guide.txt

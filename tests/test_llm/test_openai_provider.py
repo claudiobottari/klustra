@@ -89,3 +89,26 @@ def test_call_api_error_raises_llm_call_error(
     with patch.object(provider._client.chat.completions, "create", side_effect=exc):
         with pytest.raises(LLMCallError, match="429"):
             provider.call(request)
+
+
+def test_empty_completion_retries_then_succeeds(
+    provider: OpenAICompatibleProvider,
+) -> None:
+    """Empty completion is transient: retried via LLMCallError branch, succeeds on 3rd."""
+    request = LLMRequest(
+        messages=[LLMMessage(role="user", content="hi")],
+        model="gpt-4",
+    )
+    empty = _mock_completion("")
+    whitespace = _mock_completion("   \n")
+    good = _mock_completion("Hello!", prompt_tokens=12, completion_tokens=7)
+    with patch.object(
+        provider._client.chat.completions,
+        "create",
+        side_effect=[empty, whitespace, good],
+    ) as mock_create:
+        response = provider.call(request)
+    assert response.content == "Hello!"
+    assert response.tokens_in == 12
+    assert response.tokens_out == 7
+    assert mock_create.call_count == 3

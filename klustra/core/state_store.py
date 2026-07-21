@@ -31,6 +31,22 @@ class PageRecord(BaseModel):
     level: int = Field(ge=0)
     content_hash: str
     embedding_hash: str | None = None
+    title: str = ""
+    description: str = ""
+    tags: list[str] = Field(default_factory=list)
+
+
+class HierarchyStateRecord(BaseModel):
+    """Snapshot of the last hierarchy build (SPEC §6.2 — feeds incremental judge)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    run_id: str
+    page_embeddings: dict[str, list[float]] = Field(default_factory=dict)
+    page_content_hashes: dict[str, str] = Field(default_factory=dict)
+    cluster_membership: dict[str, str] = Field(default_factory=dict)
+    cluster_summaries: dict[str, str] = Field(default_factory=dict)
+    superseded_map: dict[str, str] = Field(default_factory=dict)
 
 
 class StateStore(ABC):
@@ -68,3 +84,9 @@ class StateStore(ABC):
 
     @abstractmethod
     def append_run(self, run_id: str, record: dict[str, Any]) -> None: ...
+
+    @abstractmethod
+    def get_hierarchy_state(self) -> HierarchyStateRecord | None: ...
+
+    @abstractmethod
+    def put_hierarchy_state(self, record: HierarchyStateRecord, *, run_id: str) -> None: ...

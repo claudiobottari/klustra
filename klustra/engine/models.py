@@ -101,7 +101,7 @@ LIBRARIAN_SCHEMA: dict[str, Any] = {
         "body_md": {"type": "string"},
         "tags": {"type": "array", "items": {"type": "string"}},
         "aliases": {"type": "array", "items": {"type": "string"}},
-        "confidence": {"type": "number"},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
     },
     "required": ["title", "description", "body_md", "tags", "aliases", "confidence"],
 }

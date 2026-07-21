@@ -2,10 +2,15 @@
 type: concept
 level: 0
 entity_id: proc.testing
-title: proc.testing
+title: Cable Testing
 domain: default
 confidence: 0.5
 schema_version: '1.0'
+description: Testing procedures and standards for HV cable systems.
+tags:
+- testing
+- standards
+- iec
 sources:
 - source_id: 7429256272cad6cf
   source_path: CORPUS/testing_procedures.md

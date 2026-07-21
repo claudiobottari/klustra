@@ -2,10 +2,15 @@
 type: concept
 level: 0
 entity_id: mat.xlpe
-title: mat.xlpe
+title: XLPE Insulation
 domain: default
 confidence: 0.5
 schema_version: '1.0'
+description: Cross-linked polyethylene insulation for high-voltage cables.
+tags:
+- material
+- insulation
+- xlpe
 sources:
 - source_id: 72e6e04a4cd21cc8
   source_path: CORPUS/xlpe_material.md
@@ -13,7 +18,7 @@ created_at: '2025-01-15T12:00:00.000000+00:00'
 updated_at: '2025-01-15T12:00:00.000000+00:00'
 ---
 
-Cross-linked polyethylene (XLPE) is the dominant insulation material for [prod.hv-cable](../prod/hv-cable.md) systems operating at 66 kV and above. ^[72e6e04a4cd21cc8:doc:1]
+Cross-linked polyethylene (XLPE) is the dominant insulation material for [HV Cable System](../prod/hv-cable.md) systems operating at 66 kV and above. ^[72e6e04a4cd21cc8:doc:1]
 
 ## Properties
 

@@ -27,6 +27,15 @@ dev = [
 [project.scripts]
 klustra = "klustra.cli:app"
 
+[project.optional-dependencies]
+hierarchy = [
+    "numpy>=1.24",
+    "umap-learn>=0.5.6",
+    "hdbscan>=0.8.38",
+    "scikit-learn>=1.3",
+    "numba>=0.60",
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -56,3 +65,11 @@ strict = true
 [[tool.mypy.overrides]]
 module = "klustra.engine.*"
 strict = true
+
+[[tool.mypy.overrides]]
+module = "klustra.hierarchy.*"
+strict = true
+
+[[tool.mypy.overrides]]
+module = ["umap", "hdbscan", "sklearn.*"]
+ignore_missing_imports = true

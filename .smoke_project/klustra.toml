@@ -1,0 +1,19 @@
+[llm.extraction]
+provider = "openrouter"
+model = "deepseek/deepseek-v4-flash"
+
+[llm.librarian]
+provider = "openrouter"
+model = "deepseek/deepseek-v4-flash"
+
+[llm.hierarchy]
+provider = "openrouter"
+model = "deepseek/deepseek-v4-flash"
+
+[llm.judge]
+provider = "openrouter"
+model = "deepseek/deepseek-v4-flash"
+
+[hierarchy]
+min_cluster_size = 2
+home_threshold = 2

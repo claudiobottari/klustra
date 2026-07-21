@@ -3,7 +3,7 @@
 # (i.e. before Fase 1 scaffold), so it's safe to install on day one.
 set -e
 if [ -f pyproject.toml ]; then
-  uv run ruff check --fix . --quiet 2>/dev/null || true
-  uv run ruff format --quiet . 2>/dev/null || true
+  uv run ruff check --fix . --quiet
+  uv run ruff format --quiet .
 fi
 exit 0

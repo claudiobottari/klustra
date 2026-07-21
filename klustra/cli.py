@@ -230,14 +230,19 @@ def domain_show(
 
 
 @app.command()
-def hierarchy() -> None:
-    """Build cluster hierarchy (not yet implemented)."""
+def hierarchy(
+    full: Annotated[bool, typer.Option("--full", help="Force full rebuild")] = False,
+) -> None:
+    """Build cluster/home page hierarchy (RAPTOR — SPEC §6)."""
+    from klustra.core.errors import ConfigError
+
     nx = _get_klustra()
     try:
-        nx.build_hierarchy()
-    except NotImplementedError as e:
+        result = nx.build_hierarchy(full=full)
+    except (ConfigError, NotImplementedError) as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(1) from None
+    typer.echo(f"Built {len(result.pages)} page(s), max_level={result.max_level}.")
 
 
 # --- stats ---
