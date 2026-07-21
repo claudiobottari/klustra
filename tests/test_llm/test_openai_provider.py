@@ -112,3 +112,55 @@ def test_empty_completion_retries_then_succeeds(
     assert response.tokens_in == 12
     assert response.tokens_out == 7
     assert mock_create.call_count == 3
+
+
+def test_none_choices_raises_empty_completion_error_not_typeerror(
+    provider: OpenAICompatibleProvider,
+) -> None:
+    """completion.choices=None (lenient SDK parsing of a malformed OpenRouter response)
+    must raise LLMEmptyCompletionError, not TypeError, and must be retried like the
+    empty-content case."""
+    request = LLMRequest(
+        messages=[LLMMessage(role="user", content="hi")],
+        model="gpt-4",
+    )
+    none_choices = MagicMock(
+        id="cmpl-1",
+        model="gpt-4",
+        choices=None,
+        model_extra={"error": {"message": "upstream failure", "code": 502}},
+    )
+    good = _mock_completion("Hello!", prompt_tokens=12, completion_tokens=7)
+    with patch.object(
+        provider._client.chat.completions,
+        "create",
+        side_effect=[none_choices, good],
+    ) as mock_create:
+        response = provider.call(request)
+    assert response.content == "Hello!"
+    assert mock_create.call_count == 2
+
+
+def test_none_choices_message_includes_diagnostic_fields(
+    provider: OpenAICompatibleProvider,
+) -> None:
+    """The raised error carries whatever OpenRouter put on the completion, not just 'empty'."""
+    request = LLMRequest(
+        messages=[LLMMessage(role="user", content="hi")],
+        model="gpt-4",
+    )
+    none_choices = MagicMock(
+        id="cmpl-err",
+        model="gpt-4",
+        choices=None,
+        model_extra={"error": {"message": "upstream failure", "code": 502}},
+    )
+    with (
+        patch.object(
+            provider._client.chat.completions,
+            "create",
+            side_effect=[none_choices] * 3,
+        ),
+        pytest.raises(LLMCallError, match="cmpl-err"),
+    ):
+        provider.call(request)

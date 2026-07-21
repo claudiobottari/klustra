@@ -59,6 +59,12 @@ class OpenAICompatibleProvider(LLMProvider):
         except openai.APIConnectionError as exc:
             raise LLMCallError(f"OpenAI connection error: {exc}") from exc
 
+        if not completion.choices:
+            raise LLMEmptyCompletionError(
+                f"Model {request.model} returned no choices "
+                f"(id={completion.id!r}, model={completion.model!r}, "
+                f"extra={completion.model_extra!r})"
+            )
         choice = completion.choices[0]
         raw = choice.message.content
         if raw is None or not raw.strip():
