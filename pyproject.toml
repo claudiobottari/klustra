@@ -5,8 +5,14 @@ description = "Recursive knowledge abstraction engine: heterogeneous files to OK
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "anthropic>=0.40",
+    "jinja2>=3.1",
+    "openai>=1.30",
     "openpyxl>=3.1.5",
     "pydantic>=2",
+    "pyyaml>=6.0.3",
+    "tenacity>=8.2",
+    "typer>=0.12",
 ]
 
 [dependency-groups]
@@ -15,7 +21,11 @@ dev = [
     "mypy>=1.13",
     "ruff>=0.8",
     "types-openpyxl>=3.1.5.20260518",
+    "types-pyyaml>=6.0.12.20260518",
 ]
+
+[project.scripts]
+klustra = "klustra.cli:app"
 
 [build-system]
 requires = ["hatchling"]
@@ -37,4 +47,12 @@ warn_unused_configs = true
 
 [[tool.mypy.overrides]]
 module = "klustra.core.*"
+strict = true
+
+[[tool.mypy.overrides]]
+module = "klustra.llm.*"
+strict = true
+
+[[tool.mypy.overrides]]
+module = "klustra.engine.*"
 strict = true

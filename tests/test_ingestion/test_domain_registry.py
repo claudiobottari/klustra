@@ -7,6 +7,7 @@ from klustra.core.file_state_store import FileStateStore
 from klustra.ingestion.connectors import ConnectorRegistry, LocalFolderConnector
 from klustra.ingestion.domain_registry import (
     LocalFolderSourceConfig,
+    check_instructions,
     get_domain,
     list_domains,
     load_domain,
@@ -150,3 +151,55 @@ def test_connector_registry_missing_raises(registry: TranslatorRegistry) -> None
     reg = ConnectorRegistry()
     with pytest.raises(ConnectorNotFoundError):
         reg.get("sharepoint")
+
+
+# ---------------------------------------------------------------------------
+# check_instructions
+# ---------------------------------------------------------------------------
+
+
+def test_check_instructions_found(tmp_path: Path) -> None:
+    klustra_dir = tmp_path / ".klustra"
+    instr_dir = klustra_dir / "instructions"
+    instr_dir.mkdir(parents=True)
+    instr_file = instr_dir / "engineering.md"
+    instr_file.write_text("# Engineering instructions\n", encoding="utf-8")
+    result = check_instructions("engineering", klustra_dir)
+    assert result == instr_file
+
+
+def test_check_instructions_missing_returns_none(tmp_path: Path) -> None:
+    """Missing instructions file produces None (warning), not an error."""
+    klustra_dir = tmp_path / ".klustra"
+    klustra_dir.mkdir(parents=True)
+    result = check_instructions("nonexistent", klustra_dir)
+    assert result is None
+
+
+# ---------------------------------------------------------------------------
+# LocalFolderConnector equivalence to sync_folder
+# ---------------------------------------------------------------------------
+
+
+def test_local_folder_connector_matches_sync_folder(
+    tmp_path: Path, registry: TranslatorRegistry
+) -> None:
+    """LocalFolderConnector.sync() produces the same ChangeSet as sync_folder directly."""
+    folder = tmp_path / "data"
+    folder.mkdir()
+    (folder / "a.txt").write_text("alpha", encoding="utf-8")
+    (folder / "b.txt").write_text("beta", encoding="utf-8")
+
+    from klustra.ingestion.source_manager import sync_folder
+
+    state_direct = FileStateStore(tmp_path / "direct")
+    cs_direct = sync_folder(folder, state_direct, registry, run_id="run1", recursive=True)
+
+    state_connector = FileStateStore(tmp_path / "connector")
+    connector = LocalFolderConnector(registry, run_id="run1")
+    source = LocalFolderSourceConfig(type="local_folder", path=str(folder), recursive=True)
+    cs_connector = connector.sync(source, state_connector)
+
+    assert sorted(cs_direct.sources.added) == sorted(cs_connector.sources.added)
+    assert cs_direct.sources.modified == cs_connector.sources.modified
+    assert cs_direct.sources.removed == cs_connector.sources.removed

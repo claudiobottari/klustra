@@ -1,6 +1,7 @@
 from klustra.core.changeset import ChangeSet, PageChanges, SourceChanges
 from klustra.core.config import (
     KlustraConfig,
+    LintConfig,
     LLMConfig,
     LLMRoleConfig,
     load_config,
@@ -9,6 +10,7 @@ from klustra.core.config import (
 from klustra.core.errors import (
     ConfigError,
     ConformanceError,
+    ExporterNotFoundError,
     KlustraError,
     PageNotFoundError,
     SourceNotFoundError,
@@ -27,10 +29,12 @@ __all__ = [
     "KlustraConfig",
     "LLMConfig",
     "LLMRoleConfig",
+    "LintConfig",
     "load_config",
     "resolve_api_key",
     "ConfigError",
     "ConformanceError",
+    "ExporterNotFoundError",
     "KlustraError",
     "PageNotFoundError",
     "SourceNotFoundError",

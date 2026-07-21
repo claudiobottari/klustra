@@ -15,6 +15,8 @@ class LLMRoleConfig(BaseModel):
     provider: str
     model: str
     max_tokens: int | None = None
+    base_url: str | None = None
+    retry_attempts: int = 3
 
 
 class LLMConfig(BaseModel):
@@ -27,12 +29,21 @@ class LLMConfig(BaseModel):
     embeddings: LLMRoleConfig | None = None
 
 
+class LintConfig(BaseModel):
+    """Lint quality gate config (SPEC §5.1)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    promote_to_error: list[str] = Field(default_factory=list)
+
+
 class KlustraConfig(BaseModel):
     """Parsed klustra.toml (SPEC §12). Secrets stay in env — see resolve_api_key()."""
 
     model_config = ConfigDict(frozen=True)
 
     llm: LLMConfig = Field(default_factory=LLMConfig)
+    lint: LintConfig = Field(default_factory=LintConfig)
 
 
 def load_config(path: Path | str = Path("klustra.toml")) -> KlustraConfig:

@@ -66,3 +66,13 @@ def get_domain(label: str, klustra_dir: Path | str = Path(".klustra")) -> Domain
     if not candidate.exists():
         return None
     return load_domain(candidate)
+
+
+def check_instructions(label: str, klustra_dir: Path | str = Path(".klustra")) -> Path | None:
+    """Return the instructions path if it exists, None otherwise.
+
+    Per SPEC §4.4: missing instructions is a warning, not an error —
+    compile proceeds with default instructions only.
+    """
+    path = Path(klustra_dir) / "instructions" / f"{label}.md"
+    return path if path.exists() else None

@@ -28,3 +28,23 @@ class TranslatorNotFoundError(KlustraError):
 
 class ConnectorNotFoundError(KlustraError):
     """No connector registered for the given source type."""
+
+
+class ExporterNotFoundError(KlustraError):
+    """No exporter registered for the given name."""
+
+
+class LLMError(KlustraError):
+    """Base class for LLM-layer failures."""
+
+
+class LLMCallError(LLMError):
+    """Network or API call failed after all retries."""
+
+
+class LLMValidationError(LLMError):
+    """LLM response did not conform to the expected JSON schema."""
+
+
+class LLMKeyMissingError(LLMError):
+    """Required API key environment variable is not set."""
