@@ -1,6 +1,6 @@
 [project]
 name = "klustra"
-version = "0.2.0"
+version = "0.2.1"
 description = "Recursive knowledge abstraction engine: heterogeneous files to OKF wiki to hierarchical cluster/home pages."
 readme = "README.md"
 requires-python = ">=3.11"
