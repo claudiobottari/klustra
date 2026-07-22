@@ -279,6 +279,28 @@ The only context carried between chunks is the enclosing heading, repeated as `<
 
 **Known gap:** Phase 2 has no equivalent bound. `api.compile` builds every `SourceContribution` with all units of a source, so the Librarian call can still exceed a context window on a large corpus. Chunking there is not simply reusable — the Librarian's job is whole-entity synthesis — and is deferred.
 
+### 5.3 Resumable compile
+
+An interrupted compile resumes from the first unprocessed source instead of restarting. Progress is checkpointed through `StateStore` (`get_checkpoints` / `put_checkpoint` / `clear_checkpoints`), persisted in `.klustra/state.json`.
+
+**Key = `source_id`, not `entity_id`.** `entity_id` is a Phase 1 *output* — LLM-proposed, discovered only after extraction runs, and many-to-many with files — so it cannot identify a file whose extraction has not happened yet. `source_id` (SHA-256 of the resolved absolute path) is the per-file identity that already exists in state.
+
+A `CompileCheckpoint` carries `{source_id, status, sha256, entity_ids, updated_at}` with `status ∈ {pending, in_progress, done, failed}`. `entity_ids` is the checkpointed Phase 1 result: on resume it is replayed in place of the LLM call, which is what makes a resumed page's `sources[]` identical to an uninterrupted run. Units are re-derived by re-translating (deterministic, zero LLM), so nothing else needs persisting — `is_new` and `related_existing` are not consumed downstream.
+
+**Resume rules.** Only `done` gates skipping; `pending`, `in_progress` and `failed` all mean reprocess. `in_progress` is never trusted — it is exactly what a crash mid-extraction leaves behind, and redo is always at whole-file granularity, never at chunk granularity (§5.2), to avoid a partial-unit merge.
+
+**Invalidation.** A checkpoint whose `source_id` is no longer tracked is dropped and logged; a checkpoint whose `sha256` no longer matches the source is requeued. Neither triggers a silent full reprocess.
+
+**Scoping.** Checkpoints live in the project's single `.klustra/state.json`, keyed by a path-derived `source_id`, so different source sets cannot cross-contaminate. Lookup is deliberately **run_id-independent**: a resuming compile mints a new `run_id` and must still see the prior run's progress. Note that `compile` has no notion of a domain today — it processes every source in `state.list_sources()` — so domain-level scoping does not apply.
+
+**Lifecycle.** Checkpoints are a crash artifact, not permanent state: a fully successful compile clears them, so a repeated `compile()` behaves exactly as it did before this feature. Any raise leaves them intact.
+
+**Phase 2 gate.** The Librarian merge runs only when every tracked source is `done`; otherwise `CompileIncompleteError` is raised. Merging a partial contribution set would silently drop the provenance of sources whose extraction never ran. A crash between Phase 1 and Phase 2 therefore resumes by replaying all checkpoints (zero extraction calls) and re-running Phase 2.
+
+**Known gap:** Phase 2 itself is not checkpointed — an interruption during the Librarian merge re-runs every entity, though pages already written are simply overwritten with equivalent content.
+
+**CLI:** resume is the default; `klustra compile --fresh` (alias `--no-resume`) discards checkpoints and recompiles everything.
+
 ---
 
 ## 6. Hierarchy engine (the heart of the system)

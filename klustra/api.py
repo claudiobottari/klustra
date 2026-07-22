@@ -5,16 +5,23 @@ from __future__ import annotations
 import logging
 import uuid
 from collections import defaultdict
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
 from klustra.core.changeset import ChangeSet
-from klustra.core.config import KlustraConfig, load_config
+from klustra.core.config import KlustraConfig, LLMRoleConfig, load_config
+from klustra.core.errors import CompileIncompleteError
 from klustra.core.file_state_store import FileStateStore
 from klustra.core.knowledge_unit import KnowledgeUnit
 from klustra.core.page import Page
 from klustra.core.source_ref import SourceRef
-from klustra.core.state_store import HierarchyStateRecord, PageRecord
+from klustra.core.state_store import (
+    CheckpointStatus,
+    CompileCheckpoint,
+    HierarchyStateRecord,
+    PageRecord,
+)
 from klustra.engine.extraction import extract_concepts
 from klustra.engine.librarian import merge_and_generate, persist_librarian_result
 from klustra.engine.lint import LintConfig, LintFinding, lint_pages
@@ -155,8 +162,13 @@ class Klustra:
 
     # --- Compilation ---
 
-    def compile(self) -> list[LibrarianResult]:
-        """Full compile pipeline: translate → extract → librarian merge (SPEC §5)."""
+    def compile(self, *, fresh: bool = False) -> list[LibrarianResult]:
+        """Full compile pipeline: translate → extract → librarian merge (SPEC §5).
+
+        Resumable (SPEC §5.3): Phase 1 checkpoints per source, so an interrupted
+        run picks up at the first unprocessed source instead of restarting.
+        `fresh=True` discards any checkpoint and recompiles everything.
+        """
         from klustra.core.errors import ConfigError
 
         run_id = str(uuid.uuid4())
@@ -176,9 +188,11 @@ class Klustra:
         all_units: list[KnowledgeUnit] = []
         units_by_source: dict[str, list[KnowledgeUnit]] = defaultdict(list)
         source_paths: dict[str, str] = {}
+        source_hashes: dict[str, str] = {}
 
         for source in sources:
             source_paths[source.source_id] = source.source_path
+            source_hashes[source.source_id] = source.sha256
             translator = self.translator_registry.get_for_path(source.source_path)
             ctx = TranslateContext(run_id=run_id)
             ref = SourceRef(source_id=source.source_id, source_path=source.source_path)
@@ -187,40 +201,51 @@ class Klustra:
                 all_units.append(unit)
                 units_by_source[source.source_id].append(unit)
 
+        resumable = self._resumable_checkpoints(source_hashes, run_id, fresh=fresh)
+
         existing_index = [p.entity_id for p in self.state.list_pages()]
 
         entity_contributions: dict[str, list[SourceContribution]] = defaultdict(list)
 
         total_sources = len(units_by_source)
         for idx, (source_id, units) in enumerate(units_by_source.items(), start=1):
-            logger.info(
-                "[compile] extracting concepts from source %d/%d: %s",
-                idx,
-                total_sources,
-                source_paths[source_id],
-            )
-            extraction_results = extract_concepts(
-                units=units,
-                source_id=source_id,
-                existing_index=existing_index,
-                provider=self.provider,
-                model=extraction_cfg.model,
-                sink=self._sink,
-                max_tokens=extraction_cfg.max_tokens,
-                retry_attempts=extraction_cfg.retry_attempts,
-                max_input_tokens=self.config.extraction.max_input_tokens,
-            )
-            for er in extraction_results:
-                for candidate in er.candidates:
-                    entity_id = candidate.entity_id_proposal
-                    if entity_id not in existing_index:
-                        existing_index.append(entity_id)
-                    contrib = SourceContribution(
+            done = resumable.get(source_id)
+            if done is not None:
+                logger.info(
+                    "[compile] source %d/%d already done, replaying checkpoint: %s",
+                    idx,
+                    total_sources,
+                    source_paths[source_id],
+                )
+                entity_ids = done.entity_ids
+            else:
+                logger.info(
+                    "[compile] extracting concepts from source %d/%d: %s",
+                    idx,
+                    total_sources,
+                    source_paths[source_id],
+                )
+                entity_ids = self._extract_source(
+                    source_id=source_id,
+                    units=units,
+                    existing_index=existing_index,
+                    extraction_cfg=extraction_cfg,
+                    sha256=source_hashes.get(source_id, ""),
+                    run_id=run_id,
+                )
+
+            for entity_id in entity_ids:
+                if entity_id not in existing_index:
+                    existing_index.append(entity_id)
+                entity_contributions[entity_id].append(
+                    SourceContribution(
                         source_id=source_id,
                         source_path=source_paths[source_id],
                         units=units,
                     )
-                    entity_contributions[entity_id].append(contrib)
+                )
+
+        self._require_phase1_complete(list(units_by_source))
 
         results: list[LibrarianResult] = []
         total_entities = len(entity_contributions)
@@ -247,8 +272,126 @@ class Klustra:
             self._write_body(result_lib.page.entity_id, result_lib.body_md)
             results.append(result_lib)
 
+        # Only a fully successful run retires the checkpoint. Any earlier raise
+        # leaves it on disk, which is what makes the next compile resumable.
+        self.state.clear_checkpoints(run_id=run_id)
+
         logger.info("[compile] done: %d page(s)", len(results))
         return results
+
+    def _resumable_checkpoints(
+        self,
+        source_hashes: dict[str, str],
+        run_id: str,
+        *,
+        fresh: bool,
+    ) -> dict[str, CompileCheckpoint]:
+        """Checkpoints safe to replay, after dropping stale and non-done entries.
+
+        Only `done` gates skipping; `pending`, `in_progress` and `failed` all
+        mean reprocess. `in_progress` in particular is never trusted — it is
+        what a crash mid-extraction leaves behind.
+        """
+        existing = self.state.get_checkpoints()
+        if fresh:
+            if existing:
+                logger.info("[compile] --fresh: discarding %d checkpoint(s)", len(existing))
+                self.state.clear_checkpoints(run_id=run_id)
+            return {}
+        if not existing:
+            return {}
+
+        resumable: dict[str, CompileCheckpoint] = {}
+        stale = 0
+        requeued = 0
+        for source_id, cp in existing.items():
+            if source_id not in source_hashes:
+                stale += 1
+                continue
+            if cp.status != "done" or cp.sha256 != source_hashes[source_id]:
+                requeued += 1
+                continue
+            resumable[source_id] = cp
+
+        if stale:
+            logger.info(
+                "[compile] invalidating %d checkpoint(s) for sources no longer tracked", stale
+            )
+        logger.info(
+            "[compile] resuming: %d source(s) done, %d pending, %d invalidated",
+            len(resumable),
+            len(source_hashes) - len(resumable),
+            stale,
+        )
+        if requeued:
+            logger.info("[compile] requeuing %d incomplete or changed source(s)", requeued)
+        return resumable
+
+    def _extract_source(
+        self,
+        *,
+        source_id: str,
+        units: list[KnowledgeUnit],
+        existing_index: list[str],
+        extraction_cfg: LLMRoleConfig,
+        sha256: str,
+        run_id: str,
+    ) -> list[str]:
+        """Run Phase 1 for one source and checkpoint the result."""
+        self._put_checkpoint(source_id, "in_progress", sha256, [], run_id)
+        try:
+            extraction_results = extract_concepts(
+                units=units,
+                source_id=source_id,
+                existing_index=existing_index,
+                provider=self.provider,
+                model=extraction_cfg.model,
+                sink=self._sink,
+                max_tokens=extraction_cfg.max_tokens,
+                retry_attempts=extraction_cfg.retry_attempts,
+                max_input_tokens=self.config.extraction.max_input_tokens,
+            )
+        except Exception:
+            self._put_checkpoint(source_id, "failed", sha256, [], run_id)
+            raise
+
+        entity_ids = [
+            candidate.entity_id_proposal for er in extraction_results for candidate in er.candidates
+        ]
+        self._put_checkpoint(source_id, "done", sha256, entity_ids, run_id)
+        return entity_ids
+
+    def _put_checkpoint(
+        self,
+        source_id: str,
+        status: CheckpointStatus,
+        sha256: str,
+        entity_ids: list[str],
+        run_id: str,
+    ) -> None:
+        self.state.put_checkpoint(
+            CompileCheckpoint(
+                source_id=source_id,
+                status=status,
+                sha256=sha256,
+                entity_ids=entity_ids,
+                updated_at=datetime.now(UTC),
+            ),
+            run_id=run_id,
+        )
+
+    def _require_phase1_complete(self, source_ids: list[str]) -> None:
+        """Phase 2 must never merge a partial contribution set — that would drop
+        provenance from sources whose extraction never ran."""
+        checkpoints = self.state.get_checkpoints()
+        incomplete = [
+            sid for sid in source_ids if sid not in checkpoints or checkpoints[sid].status != "done"
+        ]
+        if incomplete:
+            raise CompileIncompleteError(
+                f"Phase 1 incomplete for {len(incomplete)} source(s); refusing to run the "
+                f"Librarian merge on a partial contribution set. Re-run compile to resume."
+            )
 
     # --- Validation & Lint ---
 

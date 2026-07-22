@@ -162,3 +162,74 @@ def test_flush_does_not_leave_temp_files_behind(tmp_path, now):
     klustra_dir = tmp_path / ".klustra"
     leftovers = [p for p in klustra_dir.iterdir() if p.name.endswith(".tmp")]
     assert leftovers == []
+
+
+# --- compile checkpoints (SPEC §5.3) ---
+
+
+def _checkpoint(now, source_id="src-a", status="done", sha256="hash-a", entity_ids=None):
+    from klustra.core.state_store import CompileCheckpoint
+
+    return CompileCheckpoint(
+        source_id=source_id,
+        status=status,
+        sha256=sha256,
+        entity_ids=entity_ids if entity_ids is not None else ["mat.xlpe", "proc.testing"],
+        updated_at=now,
+    )
+
+
+def test_checkpoint_round_trip_at_file_granularity(tmp_path, now):
+    store = FileStateStore(tmp_path)
+    assert store.get_checkpoints() == {}
+
+    cp = _checkpoint(now)
+    store.put_checkpoint(cp, run_id="run-1")
+
+    assert store.get_checkpoints() == {"src-a": cp}
+
+
+def test_checkpoints_survive_reload_and_are_run_id_independent(tmp_path, now):
+    """A resuming compile mints a NEW run_id and must still see prior progress."""
+    store = FileStateStore(tmp_path)
+    store.put_checkpoint(_checkpoint(now, source_id="src-a"), run_id="run-1")
+    store.put_checkpoint(
+        _checkpoint(now, source_id="src-b", status="in_progress", entity_ids=[]),
+        run_id="run-1",
+    )
+
+    reloaded = FileStateStore(tmp_path)
+    found = reloaded.get_checkpoints()
+
+    assert set(found) == {"src-a", "src-b"}
+    assert found["src-a"].status == "done"
+    assert found["src-a"].entity_ids == ["mat.xlpe", "proc.testing"]
+    assert found["src-b"].status == "in_progress"
+
+
+def test_put_checkpoint_overwrites_same_source(tmp_path, now):
+    store = FileStateStore(tmp_path)
+    store.put_checkpoint(_checkpoint(now, status="in_progress", entity_ids=[]), run_id="run-1")
+    store.put_checkpoint(_checkpoint(now, status="done"), run_id="run-1")
+
+    found = store.get_checkpoints()
+    assert len(found) == 1
+    assert found["src-a"].status == "done"
+
+
+def test_clear_checkpoints_empties_and_persists(tmp_path, now):
+    store = FileStateStore(tmp_path)
+    store.put_checkpoint(_checkpoint(now), run_id="run-1")
+    store.clear_checkpoints(run_id="run-2")
+
+    assert store.get_checkpoints() == {}
+    assert FileStateStore(tmp_path).get_checkpoints() == {}
+
+
+def test_get_checkpoints_returns_a_copy(tmp_path, now):
+    store = FileStateStore(tmp_path)
+    store.put_checkpoint(_checkpoint(now), run_id="run-1")
+
+    store.get_checkpoints().clear()
+
+    assert set(store.get_checkpoints()) == {"src-a"}

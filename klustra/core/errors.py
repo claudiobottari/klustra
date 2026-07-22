@@ -34,6 +34,12 @@ class ExporterNotFoundError(KlustraError):
     """No exporter registered for the given name."""
 
 
+class CompileIncompleteError(KlustraError):
+    """Phase 1 did not finish for every tracked source, so the Librarian merge
+    was refused: merging a partial contribution set would silently drop the
+    provenance of sources whose extraction never ran. Re-run compile to resume."""
+
+
 class LLMError(KlustraError):
     """Base class for LLM-layer failures."""
 

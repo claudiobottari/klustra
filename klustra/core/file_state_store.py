@@ -7,7 +7,13 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from klustra.core.errors import StateStoreError
-from klustra.core.state_store import HierarchyStateRecord, PageRecord, SourceRecord, StateStore
+from klustra.core.state_store import (
+    CompileCheckpoint,
+    HierarchyStateRecord,
+    PageRecord,
+    SourceRecord,
+    StateStore,
+)
 
 
 class RunLogEntry(BaseModel):
@@ -25,6 +31,7 @@ class _StateDocument(BaseModel):
     links: dict[str, list[str]] = Field(default_factory=dict)
     runs: list[RunLogEntry] = Field(default_factory=list)
     hierarchy: HierarchyStateRecord | None = None
+    checkpoints: dict[str, CompileCheckpoint] = Field(default_factory=dict)
 
 
 class FileStateStore(StateStore):
@@ -125,6 +132,21 @@ class FileStateStore(StateStore):
     def list_runs(self) -> list[RunLogEntry]:
         """Not part of the StateStore ABC — the ABC has no run-log reader."""
         return list(self._doc.runs)
+
+    def get_checkpoints(self) -> dict[str, CompileCheckpoint]:
+        return dict(self._doc.checkpoints)
+
+    def put_checkpoint(self, record: CompileCheckpoint, *, run_id: str) -> None:
+        self._doc.checkpoints[record.source_id] = record
+        self._log(run_id, "put_checkpoint", source_id=record.source_id, status=record.status)
+        self._flush()
+
+    def clear_checkpoints(self, *, run_id: str) -> None:
+        if not self._doc.checkpoints:
+            return
+        self._doc.checkpoints = {}
+        self._log(run_id, "clear_checkpoints")
+        self._flush()
 
     def get_hierarchy_state(self) -> HierarchyStateRecord | None:
         return self._doc.hierarchy

@@ -147,10 +147,22 @@ def sync(
 
 
 @app.command(name="compile")
-def compile_cmd() -> None:
-    """Run the full compile pipeline (extraction + librarian merge)."""
+def compile_cmd(
+    fresh: Annotated[
+        bool,
+        typer.Option(
+            "--fresh",
+            "--no-resume",
+            help="Discard checkpoints and recompile every source from scratch.",
+        ),
+    ] = False,
+) -> None:
+    """Run the full compile pipeline (extraction + librarian merge).
+
+    Resumes from the last incomplete source by default; pass --fresh to rebuild.
+    """
     nx = _get_klustra()
-    results = nx.compile()
+    results = nx.compile(fresh=fresh)
     typer.echo(f"Compiled {len(results)} page(s).")
 
 

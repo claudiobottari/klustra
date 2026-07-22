@@ -2,7 +2,13 @@ from typing import Any
 
 import pytest
 
-from klustra.core.state_store import HierarchyStateRecord, PageRecord, SourceRecord, StateStore
+from klustra.core.state_store import (
+    CompileCheckpoint,
+    HierarchyStateRecord,
+    PageRecord,
+    SourceRecord,
+    StateStore,
+)
 
 
 class InMemoryStateStore(StateStore):
@@ -14,6 +20,7 @@ class InMemoryStateStore(StateStore):
         self._links: dict[str, list[str]] = {}
         self._runs: list[tuple[str, dict[str, Any]]] = []
         self._hierarchy: HierarchyStateRecord | None = None
+        self._checkpoints: dict[str, CompileCheckpoint] = {}
 
     def get_source(self, source_id: str) -> SourceRecord | None:
         return self._sources.get(source_id)
@@ -47,6 +54,15 @@ class InMemoryStateStore(StateStore):
 
     def append_run(self, run_id: str, record: dict[str, Any]) -> None:
         self._runs.append((run_id, record))
+
+    def get_checkpoints(self) -> dict[str, CompileCheckpoint]:
+        return dict(self._checkpoints)
+
+    def put_checkpoint(self, record: CompileCheckpoint, *, run_id: str) -> None:
+        self._checkpoints[record.source_id] = record
+
+    def clear_checkpoints(self, *, run_id: str) -> None:
+        self._checkpoints = {}
 
     def get_hierarchy_state(self) -> HierarchyStateRecord | None:
         return self._hierarchy
@@ -101,3 +117,17 @@ def test_links_and_run_log():
 
     store.append_run("run-1", {"command": "compile"})
     assert store._runs == [("run-1", {"command": "compile"})]
+
+
+def test_checkpoint_contract_on_the_abc(now):
+    store = InMemoryStateStore()
+    assert store.get_checkpoints() == {}
+
+    cp = CompileCheckpoint(
+        source_id="src-a", status="done", sha256="h", entity_ids=["a.b"], updated_at=now
+    )
+    store.put_checkpoint(cp, run_id="run-1")
+    assert store.get_checkpoints() == {"src-a": cp}
+
+    store.clear_checkpoints(run_id="run-2")
+    assert store.get_checkpoints() == {}
