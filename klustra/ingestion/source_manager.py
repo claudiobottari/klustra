@@ -2,6 +2,7 @@
 
 import fnmatch
 import hashlib
+import logging
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -10,6 +11,8 @@ from klustra.core.changeset import ChangeSet, PageChanges, SourceChanges
 from klustra.core.errors import SourceNotFoundError
 from klustra.core.state_store import PageRecord, SourceRecord, StateStore
 from klustra.ingestion.translator_registry import TranslatorRegistry
+
+logger = logging.getLogger(__name__)
 
 
 def _source_id(path: Path) -> str:
@@ -116,7 +119,9 @@ def ingest_folder(
 
     added: list[str] = []
     modified: list[str] = []
-    for f in files:
+    total = len(files)
+    for idx, f in enumerate(files, start=1):
+        logger.info("[ingest] %d/%d: %s", idx, total, f)
         cs = ingest_file(f, state, registry, run_id=run_id)
         added.extend(cs.sources.added)
         modified.extend(cs.sources.modified)
@@ -172,9 +177,13 @@ def sync_folder(
     folder = Path(folder).resolve()
     files = [f for f in _list_folder_files(folder, recursive, glob) if registry.can_handle(f)]
 
+    logger.info("[sync] hashing %d file(s) in %s", len(files), folder)
+
     # Build disk map: source_id → (path, sha256)
     disk_map: dict[str, tuple[Path, str]] = {}
-    for f in files:
+    total = len(files)
+    for idx, f in enumerate(files, start=1):
+        logger.info("[sync] hashing %d/%d: %s", idx, total, f)
         sid = _source_id(f)
         disk_map[sid] = (f, _file_sha256(f))
 
@@ -227,6 +236,12 @@ def sync_folder(
             removed_page_ids.extend(rp)
             affected_page_ids.extend(ap)
 
+    logger.info(
+        "[sync] done: +%d ~%d -%d source(s)",
+        len(added_ids),
+        len(modified_ids),
+        len(state_map.keys() - disk_map.keys()),
+    )
     return ChangeSet(
         sources=SourceChanges(
             added=added_ids,

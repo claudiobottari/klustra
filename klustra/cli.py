@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING, Annotated
 
 import typer
 
+from klustra.logging_setup import configure_logging
+
 if TYPE_CHECKING:
     from klustra.api import Klustra
     from klustra.core.changeset import ChangeSet
@@ -12,6 +14,23 @@ if TYPE_CHECKING:
 app = typer.Typer(name="klustra", no_args_is_help=True)
 domain_app = typer.Typer(name="domain", no_args_is_help=True)
 app.add_typer(domain_app, name="domain")
+
+
+@app.callback()
+def main(
+    verbose: Annotated[
+        bool,
+        typer.Option(
+            "-v", "--verbose", help="Debug logging: request/response shapes, token counts"
+        ),
+    ] = False,
+    quiet: Annotated[bool, typer.Option("-q", "--quiet", help="Warnings and errors only")] = False,
+) -> None:
+    """klustra: recursive knowledge abstraction engine."""
+    if verbose and quiet:
+        typer.echo("--verbose and --quiet are mutually exclusive", err=True)
+        raise typer.Exit(1)
+    configure_logging(verbose=verbose, quiet=quiet)
 
 
 def _get_klustra(root: "Path | None" = None) -> "Klustra":

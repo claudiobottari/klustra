@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import math
 from typing import Any, Literal
 
@@ -15,6 +16,8 @@ from klustra.llm import (
     PromptRegistry,
     TokenRecord,
 )
+
+logger = logging.getLogger(__name__)
 
 JudgeVerdict = Literal["fits", "regenerate_page", "recluster_subtree"]
 
@@ -230,7 +233,9 @@ def run_incremental(
     regenerated: list[str] = []
     reclustered: list[str] = []
 
-    for cluster_id in sorted(affected_clusters):
+    total_affected = len(affected_clusters)
+    for judge_idx, cluster_id in enumerate(sorted(affected_clusters), start=1):
+        logger.info("[hierarchy] judging cluster %r (%d/%d)", cluster_id, judge_idx, total_affected)
         summary = cluster_summaries.get(cluster_id, "")
 
         members_in_cluster = [

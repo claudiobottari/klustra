@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 from datetime import UTC, datetime
 from typing import Any, Literal
@@ -20,6 +21,8 @@ from klustra.llm import (
     PromptRegistry,
     TokenRecord,
 )
+
+logger = logging.getLogger(__name__)
 
 _SLUG_RE = re.compile(r"[^a-z0-9-]")
 
@@ -99,6 +102,13 @@ def synthesize_cluster_page(
     """LLM-synthesize one cluster page from member metadata (SPEC §6.1)."""
     registry = prompts or PromptRegistry()
 
+    logger.info(
+        "[hierarchy] generating cluster page: cluster %d, %d member(s), level %d",
+        cluster_id,
+        len(members),
+        level,
+    )
+
     member_dicts = [
         {"title": m.title, "description": m.description, "tags": m.tags} for m in members
     ]
@@ -164,6 +174,7 @@ def synthesize_cluster_page(
         created_at=now,
         updated_at=now,
     )
+    logger.info("[hierarchy] generated cluster page %r (%d member(s))", entity_id, len(members))
     return page, body_md
 
 
@@ -178,6 +189,12 @@ def synthesize_home_page(
 ) -> tuple[Page, str]:
     """Generate the terminal home page for a domain (SPEC §6.1)."""
     registry = prompts or PromptRegistry()
+
+    logger.info(
+        "[hierarchy] generating home page: %d top-level node(s), level %d",
+        len(top_nodes),
+        level,
+    )
 
     node_dicts = [
         {"title": n.title, "description": n.description, "tags": n.tags} for n in top_nodes
@@ -242,6 +259,7 @@ def synthesize_home_page(
         created_at=now,
         updated_at=now,
     )
+    logger.info("[hierarchy] generated home page %r", entity_id)
     return page, body_md
 
 
@@ -273,6 +291,12 @@ def build_hierarchy(
             break
 
         # Cluster current nodes
+        logger.info(
+            "[hierarchy] clustering %d concept(s) (level %d → %d)",
+            len(current_nodes),
+            current_level - 1,
+            current_level,
+        )
         page_inputs = [
             PageInput(
                 entity_id=n.entity_id,
@@ -315,7 +339,14 @@ def build_hierarchy(
 
         # Synthesize cluster pages
         next_nodes: list[HierarchyNode] = []
-        for cid, members in sorted(clusters.items()):
+        total_clusters = len(clusters)
+        for cluster_idx, (cid, members) in enumerate(sorted(clusters.items()), start=1):
+            logger.info(
+                "[hierarchy] cluster page %d/%d at level %d",
+                cluster_idx,
+                total_clusters,
+                current_level,
+            )
             page, body = synthesize_cluster_page(
                 cid, members, current_level, config, llm_provider, sink, run_id, prompts
             )

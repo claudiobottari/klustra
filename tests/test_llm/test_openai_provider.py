@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -449,3 +450,36 @@ def test_429_logs_requested_model_and_body_model_ref(
     warning_text = "\n".join(r.message for r in caplog.records)
     assert "deepseek/deepseek-v4-flash" in warning_text
     assert "deepseek/deepseek-chat" in warning_text
+
+
+# --- DEBUG logging: shapes + token counts, never full content ---
+
+
+def test_debug_logs_bounded_content_snippet_never_full_content(
+    provider: OpenAICompatibleProvider,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """--verbose (DEBUG) logs request/response shapes and token counts, but the
+    response content must be truncated — never the full prompt/output (CLAUDE.md:
+    never log contents/prompts at levels above a bounded DEBUG snippet)."""
+    long_content = '{"x": "' + ("A" * 5000) + '"}'
+    request = LLMRequest(
+        messages=[LLMMessage(role="user", content="give x")],
+        model="gpt-4",
+        response_schema={"type": "object"},
+    )
+    with (
+        patch.object(
+            provider._client.chat.completions,
+            "create",
+            return_value=_mock_completion(long_content),
+        ),
+        caplog.at_level(logging.DEBUG, logger="klustra"),
+    ):
+        provider.call(request)
+
+    debug_records = [r for r in caplog.records if r.levelno == logging.DEBUG]
+    assert debug_records, "expected at least one DEBUG log line"
+    for record in debug_records:
+        assert long_content not in record.getMessage(), "full response content leaked at DEBUG"
+        assert len(record.getMessage()) < len(long_content)

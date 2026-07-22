@@ -22,6 +22,8 @@ from klustra.llm.retry import (
 
 logger = logging.getLogger(__name__)
 
+_DEBUG_SNIPPET_MAX_CHARS = 200
+
 _OPENAI_BASE_URLS: dict[str, str] = {
     "openai": "https://api.openai.com/v1",
     "openrouter": "https://openrouter.ai/api/v1",
@@ -63,6 +65,15 @@ class OpenAICompatibleProvider(LLMProvider):
                     "schema": request.response_schema,
                 },
             }
+
+        logger.debug(
+            "[llm] request model=%r messages=%d max_tokens=%r schema=%s temperature=%s",
+            request.model,
+            len(messages),
+            request.max_tokens,
+            request.response_schema is not None,
+            request.temperature,
+        )
 
         try:
             completion = self._client.chat.completions.create(**kwargs)
@@ -126,6 +137,14 @@ class OpenAICompatibleProvider(LLMProvider):
                     f"finish_reason={choice.finish_reason!r}, max_tokens={max_tok})",
                     raw_content=content,
                 ) from exc
+
+        logger.debug(
+            "[llm] response model=%r tokens_in=%d tokens_out=%d content_snippet=%r",
+            request.model,
+            tokens_in,
+            tokens_out,
+            content[:_DEBUG_SNIPPET_MAX_CHARS],
+        )
 
         return LLMResponse(
             content=content,

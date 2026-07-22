@@ -17,6 +17,8 @@ from klustra.llm.retry import (
 
 logger = logging.getLogger(__name__)
 
+_DEBUG_SNIPPET_MAX_CHARS = 200
+
 
 class AnthropicProvider(LLMProvider):
     """Anthropic provider: structured output via forced tool_use."""
@@ -61,6 +63,15 @@ class AnthropicProvider(LLMProvider):
             ]
             kwargs["tool_choice"] = {"type": "tool", "name": "respond"}
 
+        logger.debug(
+            "[llm] request model=%r messages=%d max_tokens=%r schema=%s temperature=%s",
+            request.model,
+            len(messages),
+            kwargs["max_tokens"],
+            request.response_schema is not None,
+            request.temperature,
+        )
+
         try:
             response = self._client.messages.create(**kwargs)
         except anthropic.APIStatusError as exc:
@@ -103,6 +114,14 @@ class AnthropicProvider(LLMProvider):
 
         tokens_in = response.usage.input_tokens
         tokens_out = response.usage.output_tokens
+
+        logger.debug(
+            "[llm] response model=%r tokens_in=%d tokens_out=%d content_snippet=%r",
+            request.model,
+            tokens_in,
+            tokens_out,
+            content[:_DEBUG_SNIPPET_MAX_CHARS],
+        )
 
         return LLMResponse(
             content=content,

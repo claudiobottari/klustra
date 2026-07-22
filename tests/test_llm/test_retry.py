@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import pytest
 import tenacity
 
@@ -182,3 +184,33 @@ def test_find_body_model_ref_finds_nested_model_key() -> None:
     assert find_body_model_ref(body) == "deepseek/deepseek-chat"
     assert find_body_model_ref({"error": {"message": "x"}}) is None
     assert find_body_model_ref(None) is None
+
+
+def test_corrective_retry_logs_warning_with_label_and_attempt_count(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The retry-visibility gap: on a corrective JSON retry, a WARNING one-liner
+    names the call (via LLMRequest.label) and the attempt count — so 'stuck vs
+    retrying' is answerable from logs alone."""
+    request = LLMRequest(
+        messages=[LLMMessage(role="user", content="x")],
+        model="m",
+        label="librarian:iec_62067",
+    )
+    calls = 0
+
+    def call_fn(req: LLMRequest) -> LLMResponse:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise LLMValidationError("bad json", raw_content="{oops")
+        return LLMResponse(content="{}", parsed={}, tokens_in=1, tokens_out=1, model="m")
+
+    with caplog.at_level(logging.WARNING, logger="klustra"):
+        call_with_corrective_retry(call_fn, request, max_attempts=3)
+
+    warnings = [r.message for r in caplog.records if r.levelno == logging.WARNING]
+    assert any(
+        "librarian:iec_62067" in m and "attempt 2/3" in m and "invalid response" in m
+        for m in warnings
+    )

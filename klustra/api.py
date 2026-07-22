@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from collections import defaultdict
 from pathlib import Path
@@ -68,6 +69,8 @@ from klustra.ingestion.translator import TranslateContext, TranslationResult
 from klustra.ingestion.translator_registry import TranslatorRegistry
 from klustra.llm import AccountingSink, ListSink, LLMProvider, PromptRegistry, resolve_provider
 from klustra.translators.registry import build_default_registry as build_translator_registry
+
+logger = logging.getLogger(__name__)
 
 
 class Klustra:
@@ -161,6 +164,8 @@ class Klustra:
         if not sources:
             return []
 
+        logger.info("[compile] starting: %d source(s)", len(sources))
+
         extraction_cfg = self.config.llm.extraction
         librarian_cfg = self.config.llm.librarian
         if extraction_cfg is None:
@@ -186,7 +191,14 @@ class Klustra:
 
         entity_contributions: dict[str, list[SourceContribution]] = defaultdict(list)
 
-        for source_id, units in units_by_source.items():
+        total_sources = len(units_by_source)
+        for idx, (source_id, units) in enumerate(units_by_source.items(), start=1):
+            logger.info(
+                "[compile] extracting concepts from source %d/%d: %s",
+                idx,
+                total_sources,
+                source_paths[source_id],
+            )
             extraction_results = extract_concepts(
                 units=units,
                 source_id=source_id,
@@ -210,7 +222,14 @@ class Klustra:
                     entity_contributions[entity_id].append(contrib)
 
         results: list[LibrarianResult] = []
-        for entity_id, contributions in entity_contributions.items():
+        total_entities = len(entity_contributions)
+        for idx, (entity_id, contributions) in enumerate(entity_contributions.items(), start=1):
+            logger.info(
+                "[compile] librarian synthesizing entity %r (%d/%d)",
+                entity_id,
+                idx,
+                total_entities,
+            )
             result_lib = merge_and_generate(
                 entity_id=entity_id,
                 contributions=contributions,
@@ -227,6 +246,7 @@ class Klustra:
             self._write_body(result_lib.page.entity_id, result_lib.body_md)
             results.append(result_lib)
 
+        logger.info("[compile] done: %d page(s)", len(results))
         return results
 
     # --- Validation & Lint ---
@@ -249,8 +269,10 @@ class Klustra:
         exporter = self.exporter_registry.get(target)
         pages = self._load_pages()
         export_pages = [ExportPage(page=p, body_md=self._read_body(p.entity_id)) for p in pages]
+        logger.info("[export] starting: %d page(s) to %s (%s)", len(pages), output_dir, target)
         ctx = ExportContext(run_id=str(uuid.uuid4()))
         exporter.export(export_pages, Path(output_dir), ctx)
+        logger.info("[export] done: %d page(s) to %s", len(pages), output_dir)
 
     # --- Domain ---
 
@@ -331,6 +353,8 @@ class Klustra:
         prompts = PromptRegistry()
         run_id = str(uuid.uuid4())
 
+        logger.info("[hierarchy] starting: %d concept(s), full=%s", len(concept_records), full)
+
         if not full and prev is not None:
             changed, added, removed = self._diff_ids(nodes, prev)
             drift_count = len(changed) + len(added) + len(removed)
@@ -339,6 +363,12 @@ class Klustra:
                 total_count=len(nodes),
                 drift_threshold_percent=hcfg.drift_threshold_percent,
             ):
+                logger.info(
+                    "[hierarchy] incremental update: %d changed, %d added, %d removed",
+                    len(changed),
+                    len(added),
+                    len(removed),
+                )
                 new_embeddings = self._embed_nodes(nodes, cache)
                 inc_result = run_incremental(
                     changed_ids=changed,
@@ -372,6 +402,11 @@ class Klustra:
         final_result, superseded_map = self._apply_stability(result, prev, hcfg.stability_threshold)
         new_embeddings = self._embed_nodes(nodes, cache)
         self._persist_hierarchy(final_result, new_embeddings, nodes, superseded_map, run_id)
+        logger.info(
+            "[hierarchy] done: %d page(s), max_level=%d",
+            len(final_result.pages),
+            final_result.max_level,
+        )
         return final_result
 
     # --- Context / Navigate / Search (SPEC §7) ---
