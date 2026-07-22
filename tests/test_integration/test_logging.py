@@ -138,3 +138,141 @@ class TestCliVerbosity:
         runner = CliRunner()
         result = runner.invoke(app, ["-v", "-q", "ingest", str(project_dir / "data")])
         assert result.exit_code == 1
+
+
+# --- progress contract end-to-end (SPEC §13.1) ---
+
+_BIG_EXTRACTION_JSON = json.dumps(
+    {
+        "candidates": [
+            {
+                "name": "Big",
+                "entity_id_proposal": "doc.big",
+                "summary": "s",
+                "is_new": True,
+                "related_existing": [],
+            }
+        ]
+    }
+)
+
+_BIG_LIBRARIAN_JSON = json.dumps(
+    {
+        "title": "Big",
+        "description": "d",
+        "body_md": "Body. ^[src:doc:1]",
+        "tags": [],
+        "aliases": [],
+        "confidence": 0.9,
+    }
+)
+
+_CHUNK_LIMIT = 3000
+
+
+def _big_project(tmp_path: Path, sections: int = 30) -> Path:
+    root = tmp_path / "bigproject"
+    root.mkdir()
+    (root / "klustra.toml").write_text(
+        '[llm.extraction]\nprovider = "openrouter"\nmodel = "test-model"\n\n'
+        '[llm.librarian]\nprovider = "openrouter"\nmodel = "test-model"\n\n'
+        f"[extraction]\nmax_input_tokens = {_CHUNK_LIMIT}\n",
+        encoding="utf-8",
+    )
+    corpus = root / "data"
+    corpus.mkdir()
+    body = "\n\n".join(
+        f"## Section {i}\n\n" + " ".join(f"t{i}w{j}" for j in range(300)) for i in range(sections)
+    )
+    (corpus / "big.md").write_text(f"# Big\n\n{body}\n", encoding="utf-8")
+    return root
+
+
+def test_chunked_compile_with_retry_emits_the_full_progress_sequence(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Large file + one malformed response: the log must show chunking, every
+    chunk's call bracketed, the retry, and the Phase 1 → Phase 2 transition."""
+    root = _big_project(tmp_path)
+    provider = OpenAICompatibleProvider(api_key="test-key", base_url="http://fake")
+    nx = Klustra(root=root, provider=provider)
+    nx.ingest_folder(root / "data")
+
+    # Route by role rather than by call index — the chunk count is derived from
+    # the token budget, so a fixed response list would drift with it.
+    calls = {"n": 0}
+
+    def _respond(**kwargs: object):  # noqa: ANN202
+        messages = kwargs["messages"]
+        assert isinstance(messages, list)
+        system = str(messages[0]["content"]).lower()
+        if "extraction engine" in system:
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return _mock_completion("not valid json")  # forces a corrective retry
+            return _mock_completion(_BIG_EXTRACTION_JSON)
+        return _mock_completion(_BIG_LIBRARIAN_JSON)
+
+    with (
+        patch.object(provider._client.chat.completions, "create", side_effect=_respond),
+        caplog.at_level(logging.INFO, logger="klustra"),
+    ):
+        nx.compile()
+
+    msgs = [r.message for r in caplog.records]
+
+    def first_index(needle: str, *extra: str) -> int:
+        return next(i for i, m in enumerate(msgs) if needle in m and all(e in m for e in extra))
+
+    # Chunking brackets itself, and its start precedes the decision line.
+    i_chunk_start = first_index("action=chunking", "status=start")
+    i_chunk_done = first_index("action=chunking", "status=done")
+    i_triggered = first_index("chunking triggered")
+    assert i_chunk_start < i_chunk_done < i_triggered
+
+    # Every extraction call is bracketed and carries chunk N/M + input size.
+    starts = [m for m in msgs if "phase=extraction action=llm_call" in m and "status=start" in m]
+    assert len(starts) > 1, "oversized input must fan out over several calls"
+    assert all("chunk=" in m and "input_tokens=" in m and "model=" in m for m in starts)
+    assert any(
+        "phase=extraction action=llm_call" in m and "status=done" in m and "elapsed_ms=" in m
+        for m in msgs
+    )
+
+    # The corrective retry is visible at WARNING.
+    warnings = [r.message for r in caplog.records if r.levelno == logging.WARNING]
+    assert any("retrying" in m and "invalid response" in m for m in warnings)
+
+    # Phase 1 → Phase 2 transition, with Phase 2 bracketed too.
+    i_merge_start = first_index("phase=librarian_merge action=llm_call", "status=start")
+    assert i_merge_start > first_index("phase=extraction action=llm_call")
+    assert any("phase=librarian_merge action=llm_call" in m and "status=done" in m for m in msgs)
+
+
+def test_progress_lines_carry_no_prompt_or_response_content(
+    project_dir: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """CLAUDE.md rule 8: progress fields are ids, counts and timings — never the
+    source text or the model's output, at any verbosity."""
+    secret = "SUPERSECRETSOURCETEXT"
+    (project_dir / "data" / "intro.md").write_text(
+        f"# Test Material\n\n{secret} is used in cable insulation.\n", encoding="utf-8"
+    )
+
+    provider = OpenAICompatibleProvider(api_key="test-key", base_url="http://fake")
+    nx = Klustra(root=project_dir, provider=provider)
+    nx.ingest_folder(project_dir / "data")
+
+    with (
+        patch.object(
+            provider._client.chat.completions,
+            "create",
+            side_effect=[_mock_completion(EXTRACTION_JSON), _mock_completion(LIBRARIAN_JSON)],
+        ),
+        caplog.at_level(logging.DEBUG, logger="klustra"),
+    ):
+        nx.compile()
+
+    progress = [r.message for r in caplog.records if "phase=" in r.message]
+    assert progress
+    assert not any(secret in m for m in progress)

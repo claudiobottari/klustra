@@ -24,6 +24,7 @@ from klustra.llm import (
     LLMResponse,
     TokenRecord,
 )
+from klustra.logging_setup import log_op
 
 _CITATION_RE = re.compile(r"\^\[.+?\]")
 
@@ -44,7 +45,15 @@ def merge_and_generate(
     request = _build_request(
         entity_id, contributions, existing_index, model, max_tokens, retry_attempts
     )
-    response = provider.call(request)
+    with log_op(
+        "librarian_merge",
+        "llm_call",
+        entity_id=entity_id,
+        contributions=len(contributions),
+        model=model,
+        heartbeat=True,
+    ):
+        response = provider.call(request)
 
     sink.record(
         TokenRecord(
@@ -59,7 +68,15 @@ def merge_and_generate(
 
     if not _has_citations(output.body_md):
         retry_request = _build_retry_request(request, response)
-        retry_response = provider.call(retry_request)
+        with log_op(
+            "librarian_merge",
+            "retry",
+            entity_id=entity_id,
+            reason="missing_citations",
+            model=model,
+            heartbeat=True,
+        ):
+            retry_response = provider.call(retry_request)
         sink.record(
             TokenRecord(
                 role="librarian",

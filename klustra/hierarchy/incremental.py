@@ -16,6 +16,7 @@ from klustra.llm import (
     PromptRegistry,
     TokenRecord,
 )
+from klustra.logging_setup import log_op
 
 logger = logging.getLogger(__name__)
 
@@ -143,7 +144,16 @@ def judge_cluster(
         retry_attempts=retry_attempts,
         label=f"judge:{cluster_entity_id}",
     )
-    response = provider.call(request)
+    with log_op(
+        "hierarchy",
+        "llm_call",
+        kind="judge",
+        entity_id=cluster_entity_id,
+        members=len(member_titles),
+        model=model,
+        heartbeat=True,
+    ):
+        response = provider.call(request)
 
     sink.record(
         TokenRecord(

@@ -21,6 +21,7 @@ from klustra.llm import (
     PromptRegistry,
     TokenRecord,
 )
+from klustra.logging_setup import log_op
 
 logger = logging.getLogger(__name__)
 
@@ -134,7 +135,17 @@ def synthesize_cluster_page(
         retry_attempts=config.retry_attempts,
         label=f"hierarchy:cluster:l{level}:c{cluster_id}",
     )
-    response = provider.call(request)
+    with log_op(
+        "hierarchy",
+        "llm_call",
+        kind="cluster_page",
+        level=level,
+        cluster_id=cluster_id,
+        members=len(members),
+        model=config.model,
+        heartbeat=True,
+    ):
+        response = provider.call(request)
 
     sink.record(
         TokenRecord(
@@ -220,7 +231,16 @@ def synthesize_home_page(
         retry_attempts=config.retry_attempts,
         label=f"hierarchy:home:l{level}:{config.domain}",
     )
-    response = provider.call(request)
+    with log_op(
+        "hierarchy",
+        "llm_call",
+        kind="home_page",
+        level=level,
+        nodes=len(top_nodes),
+        model=config.model,
+        heartbeat=True,
+    ):
+        response = provider.call(request)
 
     sink.record(
         TokenRecord(

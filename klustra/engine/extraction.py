@@ -20,6 +20,7 @@ from klustra.llm import (
     TokenRecord,
 )
 from klustra.llm.tokens import count_tokens
+from klustra.logging_setup import log_op
 
 logger = logging.getLogger(__name__)
 
@@ -48,8 +49,21 @@ def extract_concepts(
     """
     results: list[ExtractionResult] = []
 
-    for unit in units:
-        chunks = _chunks_for(unit, existing_index, max_input_tokens)
+    total_units = len(units)
+    for unit_idx, unit in enumerate(units, start=1):
+        # Chunking re-tokenizes the accumulating chunk per block, so this step
+        # alone can run tens of seconds on a very large unit — it must not be
+        # the silent prelude to everything else.
+        with log_op(
+            "extraction",
+            "chunking",
+            source_id=source_id,
+            unit_id=unit.unit_id,
+            unit=f"{unit_idx}/{total_units}",
+            chars=len(unit.content_md),
+            heartbeat=True,
+        ):
+            chunks = _chunks_for(unit, existing_index, max_input_tokens)
         if len(chunks) > 1:
             logger.info(
                 "[compile] chunking triggered: %d chunks, source_id=%s, unit_id=%s, "
@@ -74,8 +88,18 @@ def extract_concepts(
             request = _build_request(
                 unit, existing_index, model, max_tokens, retry_attempts, source_id, chunk
             )
-            _verify_bounds(request, max_input_tokens, unit.unit_id)
-            response = provider.call(request)
+            input_tokens = _verify_bounds(request, max_input_tokens, unit.unit_id)
+            with log_op(
+                "extraction",
+                "llm_call",
+                source_id=source_id,
+                unit_id=unit.unit_id,
+                chunk=f"{chunk_idx}/{len(chunks)}",
+                input_tokens=input_tokens,
+                model=model,
+                heartbeat=True,
+            ):
+                response = provider.call(request)
 
             sink.record(
                 TokenRecord(
@@ -123,14 +147,16 @@ def _chunks_for(
     return chunk_text(unit.content_md, budget)
 
 
-def _verify_bounds(request: LLMRequest, max_input_tokens: int, unit_id: str) -> None:
-    """Runtime bound check — the config value is not trusted on its own."""
+def _verify_bounds(request: LLMRequest, max_input_tokens: int, unit_id: str) -> int:
+    """Runtime bound check — the config value is not trusted on its own.
+    Returns the counted input tokens so the caller can log them."""
     total = sum(count_tokens(m.content) for m in request.messages)
     if total > max_input_tokens:
         raise LLMInputTooLargeError(
             f"extraction request for unit {unit_id} is {total} tokens, over the "
             f"{max_input_tokens} budget even after chunking"
         )
+    return total
 
 
 def _build_request(

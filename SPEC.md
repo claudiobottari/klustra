@@ -408,6 +408,28 @@ Retry with backoff (default 3), rate limiting, structured output via JSON schema
 
 Every run: `run_id`, command, parameters, ChangeSet, LLM accounting, quality-gate outcome → `.klustra/runs.jsonl` (or a run table on Delta). Page contents/prompts/LLM output are never logged (unless `--debug`). Per-domain OKF `log.md` generated deterministically from the runs.
 
+### 13.1 Progress contract — nothing runs silently
+
+Every operation expected to exceed 1-2s, and every LLM/embedding call, is wrapped in `logging_setup.log_op`. It emits one line per transition on the `klustra.progress` logger:
+
+```
+phase=extraction action=llm_call source_id=a227c4e2 unit_id=a227c4e2#0 chunk=9/17 input_tokens=2996 model=... status=start
+phase=extraction action=llm_call ... status=running elapsed_ms=15002      # heartbeat
+phase=extraction action=llm_call ... status=done elapsed_ms=18431
+```
+
+`phase ∈ {extraction, librarian_merge, hierarchy, export, llm}`, `action ∈ {chunking, llm_call, retry, embed, umap_reduce, cluster, ...}`, `status ∈ {start, running, done, failed}`. Failures log at ERROR with `error=<ExceptionType>` and re-raise. Fields are ids, counts and timings only — never prompt or response content, at any verbosity (rule 8); the sole exception is the bounded malformed-JSON snippet the corrective-retry loop already carries.
+
+**Instrumented:** chunking (which re-tokenizes per block and can run tens of seconds on a very large unit), each per-chunk extraction call, the librarian merge and its citation retry, cluster/home page synthesis, the incremental judge, embedding batches, UMAP reduction and HDBSCAN/GMM clustering.
+
+**Heartbeat.** A synchronous blocking call cannot log from the thread that is inside it, so `heartbeat=True` starts a daemon watchdog emitting `status=running elapsed_ms=…` every `HEARTBEAT_INTERVAL_SECONDS` (15s). This is what distinguishes long-but-healthy from hung. UMAP/HDBSCAN release the GIL, so it works for CPU work too.
+
+**Verbosity.** Default INFO shows forward progress without any flag — silence at default level is itself the bug. `--verbose` adds DEBUG request/response shapes and token counts; `--quiet` drops to WARNING (retries, timeouts, errors only) and is an explicit opt-in.
+
+**Flushing.** `logging.StreamHandler` flushes per record, verified by a subprocess test asserting the `status=start` line arrives before a 5s operation completes. No buffering layer may be introduced between the handler and stdout.
+
+**Timeouts.** Every LLM and embedding client is constructed with an explicit `timeout_seconds` (`LLMRoleConfig.timeout_seconds`, default 120s) and `max_retries=0`. The SDK defaults — 600s read timeout with 2 silent internal retries — meant one unresponsive call could block ~30 minutes per attempt with no output and no hook to log from. A timeout raises `LLMTimeoutError` (distinct from `LLMCallError`, still retryable) and logs `status=timeout`. In both providers the `except APITimeoutError` branch **must precede** `except APIConnectionError`, which it subclasses.
+
 ## 14. Testing
 
 - Unit: translators (real fixture files per format, including a messy multi-table Excel), wikilink resolver, cluster matching (Jaccard), materiality pre-filter.

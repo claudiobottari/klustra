@@ -20,6 +20,7 @@ klustra/llm/           provider.py (ABC), openai_provider.py, anthropic_provider
                        mock_provider.py, retry.py, tokens.py, accounting.py,
                        prompts.py, prompts/*.md                                           SPEC §8, §9, §10
 klustra/api.py         class Klustra — the only public facade                             SPEC §4.3, §12
+klustra/logging_setup.py  configure_logging (CLI verbosity) + log_op progress contract    SPEC §13.1
 klustra/cli.py         typer app, thin wrapper over api.py                                SPEC §12
 ```
 

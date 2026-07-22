@@ -8,6 +8,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from klustra.hierarchy.embeddings import EmbeddingCache, EmbeddingProvider
+from klustra.logging_setup import log_op
 
 try:
     import numpy as np
@@ -176,10 +177,11 @@ def cluster_pages(
     texts = [p.body_md for p in pages]
     hashes = [p.content_hash for p in pages]
 
-    if cache is not None:
-        embeddings_list = cache.get_or_embed(texts, hashes, provider)
-    else:
-        embeddings_list = provider.embed(texts)
+    with log_op("hierarchy", "embed", pages=n, cached=cache is not None, heartbeat=True):
+        if cache is not None:
+            embeddings_list = cache.get_or_embed(texts, hashes, provider)
+        else:
+            embeddings_list = provider.embed(texts)
 
     embeddings = np.array(embeddings_list, dtype=np.float64)
 
@@ -187,11 +189,15 @@ def cluster_pages(
     if n_neighbors is None:
         n_neighbors = _auto_n_neighbors(n)
 
-    reduced = _reduce_umap(embeddings, n_neighbors)
+    # UMAP + HDBSCAN are pure CPU and can run for minutes on a large corpus;
+    # they release the GIL, so the heartbeat thread keeps reporting.
+    with log_op("hierarchy", "umap_reduce", pages=n, n_neighbors=n_neighbors, heartbeat=True):
+        reduced = _reduce_umap(embeddings, n_neighbors)
 
     # Cluster
     if mode == "hard":
-        labels, probs = _cluster_hard(reduced, min_cluster_size)
+        with log_op("hierarchy", "cluster", algo="hdbscan", pages=n, heartbeat=True):
+            labels, probs = _cluster_hard(reduced, min_cluster_size)
         assignments: list[ClusterAssignment] = []
         outliers: list[str] = []
 
@@ -218,9 +224,10 @@ def cluster_pages(
         )
 
     else:
-        primary_labels, max_probs, memberships = _cluster_soft(
-            reduced, min_cluster_size, probability_threshold
-        )
+        with log_op("hierarchy", "cluster", algo="gmm", pages=n, heartbeat=True):
+            primary_labels, max_probs, memberships = _cluster_soft(
+                reduced, min_cluster_size, probability_threshold
+            )
         assignments = []
         outliers = []
 

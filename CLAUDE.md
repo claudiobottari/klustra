@@ -68,7 +68,8 @@ klustra/cli.py        typer CLI — thin wrapper over api.py, no logic here
 8. **Token accounting is not optional.** Any new LLM call site must report {role, tokens_in, tokens_out} through `llm/accounting`. A call that doesn't show up in `klustra stats` is a leak.
 9. **Input size is checked pre-call with a real token count** (`llm/tokens.py`) and chunked when over `extraction.max_input_tokens` (SPEC §5.2). Never blind-retry `LLMInputTooLargeError` — it is not an `LLMCallError` for exactly that reason.
 10. **Compile must checkpoint per-file completion via `StateStore` and resume from the last incomplete file by default** (SPEC §5.3); a full rebuild requires explicit `--fresh`/`--no-resume`. Checkpoints key on `source_id` (not `entity_id` — that's a Phase 1 output), clear only on a fully successful run, and gate Phase 2 so the Librarian never merges a partial contribution set.
-11. **OpenRouter third-party models treat `strict: true` as best-effort — always enforce bounds both in JSON schema AND in the system prompt; pydantic is the final gate, not the schema.**
+11. **No operation may run silently.** Every step >1-2s or involving an LLM call wraps in `log_op(phase, action, ...)` (`logging_setup.py`) — start/end with `status` and `elapsed_ms`, `heartbeat=True` for blocking calls. All LLM/embedding clients take an explicit client-side timeout and `max_retries=0` (tenacity is the one visible retry layer). See SPEC §13.1.
+12. **OpenRouter third-party models treat `strict: true` as best-effort — always enforce bounds both in JSON schema AND in the system prompt; pydantic is the final gate, not the schema.**
 
 ## Conventions
 
