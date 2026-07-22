@@ -12,6 +12,8 @@ class TokenRecord(BaseModel):
     model: str
     tokens_in: int
     tokens_out: int
+    chunks_used: int = 1
+    """Number of input chunks the unit was split into (1 = no chunking)."""
 
 
 class AccountingSink(ABC):

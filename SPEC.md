@@ -245,7 +245,39 @@ Post-generation (deterministic): frontmatter validation (pydantic), wikilink res
 | `klustra validate` | OKF §9 conformance: frontmatter parseable, `type` non-empty, path=identity, reserved files correct | Hard error, blocks the okf_bundle export. **Never** an error for a broken link or missing optional fields (per OKF spec these are "knowledge not yet written") |
 | `klustra lint` | Quality: reachability (orphans, disconnected islands, not-in-index), completeness (stubs, missing fields), freshness (`--stale-after`), provenance (uncited claims, broken citations), hygiene (duplicate titles, self-links), broken wikilinks | Warning by default; each category can be promoted to an error in config → the run's quality gate |
 
-Contradictions and *semantic* staleness are outside deterministic lint (they require understanding): the responsibility of the Librarian (§5.2) and of a schedulable LLM check (`klustra lint --semantic`, v0.3).
+Contradictions and *semantic* staleness are outside deterministic lint (they require understanding): the responsibility of the Librarian (§5) and of a schedulable LLM check (`klustra lint --semantic`, v0.3).
+
+### 5.2 Input bounds and chunking (Phase 1)
+
+Input size is checked **before** the call, never discovered from a provider error. `llm/tokens.py::count_tokens` counts with `cl100k_base` and inflates the result by `SAFETY_MARGIN` (1.20); when tiktoken cannot be loaded (offline machine, no cached vocab) it degrades to a deliberately pessimistic 3 chars/token heuristic rather than failing the compile. cl100k is a *proxy* — the target model's tokenizer is generally not available locally — so the margin, not tokenizer fidelity, is what makes the gate safe. For a threshold gate an overestimate is the benign direction: too high means chunking a little early, too low means the context overflow this guards against.
+
+**Config: `extraction.max_input_tokens`, default 24 000.** Derivation, using the smallest context window we are willing to assume for a configured model (32 768):
+
+| Term | Tokens |
+|---|---|
+| assumed context floor | 32 768 |
+| reserved for completion (`llm.extraction.max_tokens`, typical) | −4 096 |
+| prompt scaffolding: system prompt, JSON schema, entity index | −2 048 |
+| remaining | 26 624 |
+| −10 % headroom | ≈ 23 960 |
+
+Rounded down to **24 000**. It is a floor-oriented default, not a model-specific one: no claim is made here about any particular provider's window. Large-context models should raise it in `klustra.toml`; too low only costs extra chunks. **A model with a window below 32 768 must lower it** — at the default, chunking would not trigger until 24 000 tokens and a 16 k-context model would overflow, i.e. the original bug re-armed.
+
+The per-call budget for *content* is `max_input_tokens` minus the measured cost of the scaffolding, so a growing entity index shrinks the content budget instead of silently blowing the ceiling. If the scaffolding alone leaves less than 256 tokens, `LLMInputTooLargeError` is raised naming the index size.
+
+**Chunking** (`engine/chunking.py`, deterministic, zero LLM) applies only above the threshold — content that fits is passed through byte-identical. Split ladder, each rung used only when the previous one is insufficient:
+
+1. **blocks** — markdown headings start a block, otherwise blank-line paragraphs; blocks are packed greedily
+2. **sentences** — only for a single block that overflows alone; logged at WARNING
+3. **hard character slice** — only for a single sentence that overflows alone; logged at WARNING
+
+The only context carried between chunks is the enclosing heading, repeated as `<heading> (continued)`; structured extraction does not need overlapping windows.
+
+**Map-reduce.** Each chunk is one extraction call; the partial candidates are accumulated (deduped by `entity_id_proposal`) onto the unit's single `ExtractionResult`. `source_id`, `unit_id` and `locator` are identical across chunks, so provenance is unaffected. Consolidation is *not* re-implemented: candidates converge through `api.compile`'s per-entity grouping into the existing Phase 2 Librarian merge.
+
+**`LLMInputTooLargeError` is not an `LLMCallError`** — `llm/retry.py::_is_retryable` must never see it. Retrying identical oversized input is guaranteed to fail; the correct response is chunking. It survives as the runtime bound that fires when even the finest split cannot fit.
+
+**Known gap:** Phase 2 has no equivalent bound. `api.compile` builds every `SourceContribution` with all units of a source, so the Librarian call can still exceed a context window on a large corpus. Chunking there is not simply reusable — the Librarian's job is whole-entity synthesis — and is deferred.
 
 ---
 

@@ -10,15 +10,15 @@ klustra/core/         knowledge_unit.py, page.py, source_ref.py, changeset.py,
 klustra/ingestion/     translator.py, translator_registry.py, source_manager.py,
                        connectors.py, domain_registry.py                                  SPEC §4.1, §4.3, §4.4
 klustra/translators/   excel.py, markdown.py, text.py, registry.py                        SPEC §4.1, §4.2
-klustra/engine/        extraction.py, librarian.py, models.py, dependency.py,
-                       validate.py, lint.py                                               SPEC §5, §5.1
+klustra/engine/        extraction.py, chunking.py, librarian.py, models.py,
+                       dependency.py, validate.py, lint.py                                SPEC §5, §5.1, §5.2
 klustra/linking/       resolver.py, link_graph.py                                          SPEC §3.1 (wikilink rule), §5
 klustra/hierarchy/     embeddings.py (ABC only), clustering.py, pages.py,
                        incremental.py, stability.py, context.py                           SPEC §6, §7
 klustra/exporters/     exporter.py (ABC + registry), obsidian.py, okf_bundle.py            SPEC §11
 klustra/llm/           provider.py (ABC), openai_provider.py, anthropic_provider.py,
-                       mock_provider.py, retry.py, accounting.py, prompts.py,
-                       prompts/*.md                                                       SPEC §8, §9, §10
+                       mock_provider.py, retry.py, tokens.py, accounting.py,
+                       prompts.py, prompts/*.md                                           SPEC §8, §9, §10
 klustra/api.py         class Klustra — the only public facade                             SPEC §4.3, §12
 klustra/cli.py         typer app, thin wrapper over api.py                                SPEC §12
 ```
@@ -34,7 +34,7 @@ Domains are config, not code: `.klustra/domains/<label>.toml` → `ingestion/dom
 ## Two-phase compile (`Klustra.compile`, `api.py`)
 
 1. **Translate**: every tracked source is re-translated into `KnowledgeUnit`s on every `compile()` call. SPEC §5's dependency-resolution step (reverse index concept→sources, re-extract sources that share concepts with changed ones) is implemented and unit-tested in `engine/dependency.py` (`build_reverse_index`, `resolve_dependencies`, `filter_units_for_sources`) but **not called from `api.py::compile()`** — today compile is all-sources-every-time, not incremental at the engine level.
-2. **Phase 1 — Extraction** (`engine/extraction.py::extract_concepts`): per-source-unit LLM call, structured output → concept candidates, validated through pydantic (CLAUDE.md hard rule #3). Grows `existing_index` as new entity_ids are proposed, so later sources in the same compile see earlier ones.
+2. **Phase 1 — Extraction** (`engine/extraction.py::extract_concepts`): per-source-unit LLM call, structured output → concept candidates, validated through pydantic (CLAUDE.md hard rule #3). Grows `existing_index` as new entity_ids are proposed, so later sources in the same compile see earlier ones. Input is token-counted before the call (`llm/tokens.py`) and, only above `extraction.max_input_tokens`, split by `engine/chunking.py` into several calls whose candidates are accumulated back onto the unit's single `ExtractionResult` (SPEC §5.2). Phase 2 has no equivalent bound yet — see the known gap in SPEC §5.2.
 3. **Phase 2 — Librarian merge** (`engine/librarian.py::merge_and_generate`): one LLM call per `entity_id`, given all `SourceContribution`s that proposed it. Generates frontmatter + body with mandatory `^[source_id:locator]` citations (SPEC §5, provenance = CLAUDE.md hard rule #4). `resolve_links` (`linking/resolver.py`) then rewrites `[[...]]` targets against the closed `existing_index` list — this is the *only* place wikilinks are written (CLAUDE.md hard rule #2).
 4. `persist_librarian_result` writes the `PageRecord` to `FileStateStore` and `Klustra._write_body` writes the markdown body to `.klustra/vault/<entity_id>.md`.
 

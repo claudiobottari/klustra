@@ -440,3 +440,118 @@ def test_golden_bundle(
         msg_lines.append("--- ACTUAL ---")
         msg_lines.append(actual[first][:500])
         pytest.fail("\n".join(msg_lines))
+
+
+# ---------------------------------------------------------------------------
+# Chunked-input e2e (SPEC §5.2) — kept out of the golden bundle on purpose:
+# a multi-megabyte synthetic fixture in MINI_CORPUS would force a golden regen
+# and bloat the diff for every future change.
+# ---------------------------------------------------------------------------
+
+_CHUNK_LIMIT = 3000
+
+
+class _ChunkAwareMockProvider(LLMProvider):
+    """Like the golden mock, but rejects oversized *extraction* input the way a
+    real provider would, so a regression that stops chunking fails loudly.
+
+    Librarian calls are deliberately not bounded here: Phase 2 still passes full
+    unit content (api.compile builds SourceContribution with every unit), which
+    is a known, separate gap — see SPEC §5.2.
+    """
+
+    name = "chunk_aware_mock"
+
+    def __init__(self) -> None:
+        self.extraction_calls = 0
+        self.librarian_calls = 0
+
+    def call(self, request: LLMRequest) -> LLMResponse:
+        from klustra.llm.tokens import count_tokens
+
+        system_content = request.messages[0].content if request.messages else ""
+
+        if "extraction" in system_content.lower():
+            self.extraction_calls += 1
+            total = sum(count_tokens(m.content) for m in request.messages)
+            if total > _CHUNK_LIMIT:
+                raise AssertionError(
+                    f"extraction call received {total} tokens, over the "
+                    f"{_CHUNK_LIMIT} configured budget — chunking did not apply"
+                )
+            data: dict = {
+                "candidates": [
+                    {
+                        "name": "Big Doc Concept",
+                        "entity_id_proposal": "doc.big",
+                        "summary": "Synthesized from a chunked oversized document.",
+                        "is_new": True,
+                        "related_existing": [],
+                    }
+                ]
+            }
+        else:
+            self.librarian_calls += 1
+            src_id = _deterministic_source_id(Path("big_document.md"))
+            data = {
+                "title": "Big Doc Concept",
+                "description": "Concept extracted from an oversized document.",
+                "body_md": f"Synthesis of the large document. ^[{src_id}:doc:1]",
+                "tags": ["big"],
+                "aliases": [],
+                "confidence": 0.9,
+            }
+
+        content = json.dumps(data)
+        return LLMResponse(
+            content=content,
+            parsed=data,
+            tokens_in=sum(len(m.content) for m in request.messages) // 4,
+            tokens_out=len(content) // 4,
+            model=request.model,
+        )
+
+
+def _write_large_document(path: Path, sections: int = 40, words: int = 300) -> None:
+    """Synthetic oversized markdown — generated, not committed as a fixture."""
+    parts = ["# Large Synthetic Document\n"]
+    for i in range(sections):
+        body = " ".join(f"term{i}word{j}" for j in range(words))
+        parts.append(f"## Section {i}\n\n{body}\n")
+    path.write_text("\n".join(parts), encoding="utf-8")
+
+
+def test_chunked_compile_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Oversized source → chunked Phase 1 → single merged page via existing Phase 2."""
+    from klustra.llm.tokens import count_tokens
+
+    monkeypatch.setattr("klustra.ingestion.source_manager._source_id", _deterministic_source_id)
+
+    root = tmp_path / "project"
+    root.mkdir()
+    (root / "klustra.toml").write_text(
+        '[llm.extraction]\nprovider = "mock"\nmodel = "chunk-model"\n\n'
+        '[llm.librarian]\nprovider = "mock"\nmodel = "chunk-model"\n\n'
+        f"[extraction]\nmax_input_tokens = {_CHUNK_LIMIT}\n",
+        encoding="utf-8",
+    )
+    for subdir in [".klustra", ".klustra/domains", ".klustra/instructions", ".klustra/vault"]:
+        (root / subdir).mkdir(parents=True, exist_ok=True)
+
+    corpus_dir = root / "corpus"
+    corpus_dir.mkdir()
+    doc = corpus_dir / "big_document.md"
+    _write_large_document(doc)
+    assert count_tokens(doc.read_text(encoding="utf-8")) > _CHUNK_LIMIT
+
+    provider = _ChunkAwareMockProvider()
+    nx = Klustra(root=root, provider=provider)
+    nx.ingest_folder(corpus_dir)
+    results = nx.compile()
+
+    assert provider.extraction_calls > 1, "oversized document must fan out over several calls"
+    # Reduce happened through the existing Phase 2 merge: one page, not one per chunk.
+    assert len(results) == 1
+    assert results[0].page.entity_id == "doc.big"
+    # Provenance survives chunking: the page still points at the one real source.
+    assert [s.source_id for s in results[0].page.sources] == [_deterministic_source_id(doc)]

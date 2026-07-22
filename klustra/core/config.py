@@ -30,6 +30,16 @@ class LLMConfig(BaseModel):
     embeddings: LLMRoleConfig | None = None
 
 
+class ExtractionSettings(BaseModel):
+    """[extraction] section — Phase 1 input bounds (SPEC §5.2)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    max_input_tokens: int = Field(default=24_000, gt=0)
+    """Per-call input-token ceiling before chunking kicks in. See SPEC §5.2 for
+    the derivation; raise it for large-context models."""
+
+
 class LintConfig(BaseModel):
     """Lint quality gate config (SPEC §5.1)."""
 
@@ -58,6 +68,7 @@ class KlustraConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     llm: LLMConfig = Field(default_factory=LLMConfig)
+    extraction: ExtractionSettings = Field(default_factory=ExtractionSettings)
     lint: LintConfig = Field(default_factory=LintConfig)
     hierarchy: HierarchySettings = Field(default_factory=HierarchySettings)
 

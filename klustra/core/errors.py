@@ -68,5 +68,15 @@ class LLMValidationError(LLMError):
         self.raw_content = raw_content
 
 
+class LLMInputTooLargeError(LLMError):
+    """Request content exceeds the configured input-token budget.
+
+    Deliberately NOT an LLMCallError: retrying the identical oversized input is
+    guaranteed to fail again. Callers must chunk (see engine/chunking.py), not
+    retry — this error is the runtime bound that fires when even the finest
+    split cannot fit, or when the prompt scaffolding alone blows the budget.
+    """
+
+
 class LLMKeyMissingError(LLMError):
     """Required API key environment variable is not set."""

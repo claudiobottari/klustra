@@ -208,6 +208,7 @@ class Klustra:
                 sink=self._sink,
                 max_tokens=extraction_cfg.max_tokens,
                 retry_attempts=extraction_cfg.retry_attempts,
+                max_input_tokens=self.config.extraction.max_input_tokens,
             )
             for er in extraction_results:
                 for candidate in er.candidates:
