@@ -58,6 +58,12 @@ class OpenAICompatibleProvider(LLMProvider):
             raise LLMCallError(f"OpenAI API error {exc.status_code}: {exc.message}") from exc
         except openai.APIConnectionError as exc:
             raise LLMCallError(f"OpenAI connection error: {exc}") from exc
+        except openai.APIError as exc:
+            # Catch-all for the rest of the openai.APIError hierarchy (e.g.
+            # APIResponseValidationError) that isn't a APIStatusError/APIConnectionError
+            # subclass — without this, such an exception would bypass the retry
+            # taxonomy entirely instead of becoming a retryable LLMCallError.
+            raise LLMCallError(f"OpenAI API error: {exc}") from exc
 
         if not completion.choices:
             raise LLMEmptyCompletionError(
@@ -66,13 +72,17 @@ class OpenAICompatibleProvider(LLMProvider):
                 f"extra={completion.model_extra!r})"
             )
         choice = completion.choices[0]
-        raw = choice.message.content
-        if raw is None or not raw.strip():
-            raise LLMEmptyCompletionError(f"Model {request.model} returned empty completion")
+        message = choice.message
+        raw = message.content if message is not None else None
+        if raw is None or not isinstance(raw, str) or not raw.strip():
+            raise LLMEmptyCompletionError(
+                f"Model {request.model} returned empty or malformed completion "
+                f"(message={message!r}, content={raw!r})"
+            )
         content = raw
         usage = completion.usage
-        tokens_in = usage.prompt_tokens if usage else 0
-        tokens_out = usage.completion_tokens if usage else 0
+        tokens_in = (usage.prompt_tokens or 0) if usage else 0
+        tokens_out = (usage.completion_tokens or 0) if usage else 0
 
         parsed = None
         if request.response_schema is not None:

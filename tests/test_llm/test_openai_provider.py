@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from klustra.core.errors import LLMCallError, LLMValidationError
+from klustra.core.errors import LLMCallError, LLMEmptyCompletionError, LLMValidationError
 from klustra.llm.openai_provider import OpenAICompatibleProvider
 from klustra.llm.provider import LLMMessage, LLMRequest
 
@@ -15,7 +15,7 @@ def provider() -> OpenAICompatibleProvider:
 
 
 def _mock_completion(
-    content: str, prompt_tokens: int = 10, completion_tokens: int = 5
+    content: str | None, prompt_tokens: int = 10, completion_tokens: int = 5
 ) -> MagicMock:
     usage = MagicMock()
     usage.prompt_tokens = prompt_tokens
@@ -162,5 +162,86 @@ def test_none_choices_message_includes_diagnostic_fields(
             side_effect=[none_choices] * 3,
         ),
         pytest.raises(LLMCallError, match="cmpl-err"),
+    ):
+        provider.call(request)
+
+
+def test_none_message_raises_empty_completion_error_not_attributeerror(
+    provider: OpenAICompatibleProvider,
+) -> None:
+    """choice.message=None (same lenient-parsing mechanism as choices=None) must raise
+    LLMEmptyCompletionError, not AttributeError."""
+    request = LLMRequest(messages=[LLMMessage(role="user", content="hi")], model="gpt-4")
+    choice = MagicMock(message=None)
+    none_message = MagicMock(choices=[choice])
+    good = _mock_completion("Hello!", prompt_tokens=12, completion_tokens=7)
+    with patch.object(
+        provider._client.chat.completions,
+        "create",
+        side_effect=[none_message, good],
+    ) as mock_create:
+        response = provider.call(request)
+    assert response.content == "Hello!"
+    assert mock_create.call_count == 2
+
+
+def test_non_string_content_raises_empty_completion_error_not_attributeerror(
+    provider: OpenAICompatibleProvider,
+) -> None:
+    """content that isn't a str (lenient SDK parsing leniency) must raise
+    LLMEmptyCompletionError, not AttributeError from calling .strip() on it."""
+    request = LLMRequest(messages=[LLMMessage(role="user", content="hi")], model="gpt-4")
+    bad_content = _mock_completion(content=None)
+    bad_content.choices[0].message.content = {"unexpected": "object"}
+    good = _mock_completion("Hello!", prompt_tokens=12, completion_tokens=7)
+    with patch.object(
+        provider._client.chat.completions,
+        "create",
+        side_effect=[bad_content, good],
+    ) as mock_create:
+        response = provider.call(request)
+    assert response.content == "Hello!"
+    assert mock_create.call_count == 2
+
+
+def _choices_none_completion() -> MagicMock:
+    return MagicMock(id="c1", model="gpt-4", choices=None, model_extra={})
+
+
+def _content_completion(content: str | None) -> MagicMock:
+    return _mock_completion(content)
+
+
+@pytest.mark.parametrize("schema", [None, {"type": "object"}], ids=["no_schema", "with_schema"])
+@pytest.mark.parametrize(
+    "make_completion",
+    [
+        _choices_none_completion,
+        lambda: _content_completion(None),
+        lambda: _content_completion(""),
+        lambda: _content_completion("   \n"),
+    ],
+    ids=["choices_none", "content_none", "content_empty", "content_whitespace"],
+)
+def test_malformed_response_matrix_always_raises_empty_completion_error(
+    provider: OpenAICompatibleProvider,
+    make_completion,
+    schema: dict[str, object] | None,
+) -> None:
+    """Every malformed-response shape, with and without response_schema, must raise
+    LLMEmptyCompletionError — never an unhandled TypeError/AttributeError/JSONDecodeError."""
+    request = LLMRequest(
+        messages=[LLMMessage(role="user", content="hi")],
+        model="gpt-4",
+        response_schema=schema,
+    )
+    completion = make_completion()
+    with (
+        patch.object(
+            provider._client.chat.completions,
+            "create",
+            return_value=completion,
+        ),
+        pytest.raises(LLMEmptyCompletionError),
     ):
         provider.call(request)
