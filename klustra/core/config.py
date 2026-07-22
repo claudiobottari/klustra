@@ -18,6 +18,10 @@ class LLMRoleConfig(BaseModel):
     max_tokens: int | None = None
     base_url: str | None = None
     retry_attempts: int = 3
+    timeout_seconds: float = Field(default=120.0, gt=0)
+    """Client-side per-request timeout. The OpenAI/Anthropic SDK default is 600s
+    with 2 silent internal retries — 30 min of no output per attempt. Raise it
+    for genuinely slow large-context calls; never disable it."""
 
 
 class LLMConfig(BaseModel):

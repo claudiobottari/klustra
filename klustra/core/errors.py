@@ -52,6 +52,15 @@ class LLMEmptyCompletionError(LLMCallError):
     """Model returned an empty or whitespace-only completion — treated as transient."""
 
 
+class LLMTimeoutError(LLMCallError):
+    """Client-side timeout elapsed before the provider responded.
+
+    Distinct from a generic connection error so a hang always surfaces as an
+    identifiable, logged failure instead of unbounded silence (CLAUDE.md rule
+    12). Retryable — the next attempt may land on a healthy upstream.
+    """
+
+
 class LLMRateLimitError(LLMCallError):
     """Provider signaled rate limiting or overload (HTTP 429, or an OpenRouter
     provider_error_code like 'engine_overloaded' in the error body).

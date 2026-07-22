@@ -6,8 +6,13 @@ from typing import Any
 
 import anthropic
 
-from klustra.core.errors import LLMCallError, LLMRateLimitError, LLMValidationError
-from klustra.llm.provider import LLMProvider, LLMRequest, LLMResponse
+from klustra.core.errors import (
+    LLMCallError,
+    LLMRateLimitError,
+    LLMTimeoutError,
+    LLMValidationError,
+)
+from klustra.llm.provider import DEFAULT_TIMEOUT_SECONDS, LLMProvider, LLMRequest, LLMResponse
 from klustra.llm.retry import (
     call_with_corrective_retry,
     find_body_model_ref,
@@ -25,8 +30,18 @@ class AnthropicProvider(LLMProvider):
 
     name = "anthropic"
 
-    def __init__(self, api_key: str) -> None:
-        self._client = anthropic.Anthropic(api_key=api_key)
+    def __init__(
+        self,
+        api_key: str,
+        timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+    ) -> None:
+        # max_retries=0: tenacity (@llm_retry) is the ONE visible retry layer.
+        self._client = anthropic.Anthropic(
+            api_key=api_key,
+            timeout=timeout_seconds,
+            max_retries=0,
+        )
+        self._timeout_seconds = timeout_seconds
 
     def call(self, request: LLMRequest) -> LLMResponse:
         return call_with_corrective_retry(self._call_with_retry, request)
@@ -92,6 +107,17 @@ class AnthropicProvider(LLMProvider):
                     f"(requested_model={request.model!r}, body_model_ref={body_model!r})"
                 ) from exc
             raise LLMCallError(f"Anthropic API error {exc.status_code}: {exc.message}") from exc
+        except anthropic.APITimeoutError as exc:
+            # MUST precede APIConnectionError — APITimeoutError subclasses it.
+            logger.warning(
+                "phase=llm action=llm_call status=timeout model=%r timeout_s=%.1f",
+                request.model,
+                self._timeout_seconds,
+            )
+            raise LLMTimeoutError(
+                f"Anthropic request to {request.model!r} timed out after "
+                f"{self._timeout_seconds}s (label={request.label!r})"
+            ) from exc
         except anthropic.APIConnectionError as exc:
             raise LLMCallError(f"Anthropic connection error: {exc}") from exc
 

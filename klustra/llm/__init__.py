@@ -3,13 +3,20 @@ from klustra.llm.anthropic_provider import AnthropicProvider
 from klustra.llm.mock_provider import MockProvider
 from klustra.llm.openai_provider import OpenAICompatibleProvider
 from klustra.llm.prompts import PromptRegistry
-from klustra.llm.provider import LLMMessage, LLMProvider, LLMRequest, LLMResponse
+from klustra.llm.provider import (
+    DEFAULT_TIMEOUT_SECONDS,
+    LLMMessage,
+    LLMProvider,
+    LLMRequest,
+    LLMResponse,
+)
 from klustra.llm.retry import DEFAULT_MAX_ATTEMPTS, llm_retry
 
 __all__ = [
     "AccountingSink",
     "AnthropicProvider",
     "DEFAULT_MAX_ATTEMPTS",
+    "DEFAULT_TIMEOUT_SECONDS",
     "LLMMessage",
     "LLMProvider",
     "LLMRequest",
@@ -37,6 +44,7 @@ def resolve_provider(
     provider_name: str,
     api_key: str | None = None,
     base_url: str | None = None,
+    timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
 ) -> LLMProvider:
     """Instantiate a provider by name. Falls back to env for API key."""
     from klustra.core.config import resolve_api_key
@@ -54,10 +62,10 @@ def resolve_provider(
 
     if provider_name in _OPENAI_COMPATIBLE_PROVIDERS:
         url = base_url or _BASE_URLS.get(provider_name)
-        return OpenAICompatibleProvider(api_key=key, base_url=url)
+        return OpenAICompatibleProvider(api_key=key, base_url=url, timeout_seconds=timeout_seconds)
 
     if provider_name == "anthropic":
-        return AnthropicProvider(api_key=key)
+        return AnthropicProvider(api_key=key, timeout_seconds=timeout_seconds)
 
     url = base_url or _BASE_URLS.get(provider_name)
-    return OpenAICompatibleProvider(api_key=key, base_url=url)
+    return OpenAICompatibleProvider(api_key=key, base_url=url, timeout_seconds=timeout_seconds)

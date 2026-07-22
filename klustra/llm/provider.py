@@ -5,6 +5,10 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
+DEFAULT_TIMEOUT_SECONDS = 120.0
+"""Client-side per-request timeout (SPEC §8). The SDK default is 600s with 2
+silent internal retries; that is 30 minutes of no output per attempt."""
+
 
 class LLMMessage(BaseModel):
     model_config = ConfigDict(frozen=True)

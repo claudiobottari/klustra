@@ -108,7 +108,9 @@ class Klustra:
             from klustra.core.errors import ConfigError
 
             raise ConfigError("llm.extraction config is required for LLM operations")
-        self._provider = resolve_provider(cfg.provider, base_url=cfg.base_url)
+        self._provider = resolve_provider(
+            cfg.provider, base_url=cfg.base_url, timeout_seconds=cfg.timeout_seconds
+        )
         return self._provider
 
     @property

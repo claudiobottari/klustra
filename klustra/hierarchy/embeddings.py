@@ -7,7 +7,8 @@ from abc import ABC, abstractmethod
 import openai
 
 from klustra.core.config import LLMRoleConfig
-from klustra.core.errors import ConfigError, LLMKeyMissingError
+from klustra.core.errors import ConfigError, LLMKeyMissingError, LLMTimeoutError
+from klustra.llm.provider import DEFAULT_TIMEOUT_SECONDS
 
 
 class EmbeddingProvider(ABC):
@@ -30,12 +31,27 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         api_key: str,
         model: str = "text-embedding-3-small",
         base_url: str | None = None,
+        timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
     ) -> None:
         self.model = model
-        self._client = openai.OpenAI(api_key=api_key, base_url=base_url)
+        self._timeout_seconds = timeout_seconds
+        # max_retries=0 + explicit timeout: an embeddings batch is one blocking
+        # call over potentially hundreds of texts and must never hang silently.
+        self._client = openai.OpenAI(
+            api_key=api_key,
+            base_url=base_url,
+            timeout=timeout_seconds,
+            max_retries=0,
+        )
 
     def embed(self, texts: list[str]) -> list[list[float]]:
-        response = self._client.embeddings.create(model=self.model, input=texts)
+        try:
+            response = self._client.embeddings.create(model=self.model, input=texts)
+        except openai.APITimeoutError as exc:
+            raise LLMTimeoutError(
+                f"Embeddings request to {self.model!r} timed out after "
+                f"{self._timeout_seconds}s ({len(texts)} text(s))"
+            ) from exc
         return [item.embedding for item in response.data]
 
 
@@ -58,7 +74,12 @@ def resolve_embedding_provider(cfg: LLMRoleConfig) -> EmbeddingProvider:
         raise LLMKeyMissingError(
             "No API key for embeddings provider 'openai'. Set OPENAI_API_KEY environment variable."
         )
-    return OpenAIEmbeddingProvider(api_key=key, model=cfg.model, base_url=cfg.base_url)
+    return OpenAIEmbeddingProvider(
+        api_key=key,
+        model=cfg.model,
+        base_url=cfg.base_url,
+        timeout_seconds=cfg.timeout_seconds,
+    )
 
 
 class EmbeddingCache:

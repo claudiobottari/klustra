@@ -4,16 +4,19 @@ import logging
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import httpx
+import openai
 import pytest
 
 from klustra.core.errors import (
     LLMCallError,
     LLMEmptyCompletionError,
     LLMRateLimitError,
+    LLMTimeoutError,
     LLMValidationError,
 )
 from klustra.llm.openai_provider import OpenAICompatibleProvider
-from klustra.llm.provider import LLMMessage, LLMRequest
+from klustra.llm.provider import DEFAULT_TIMEOUT_SECONDS, LLMMessage, LLMRequest
 
 
 @pytest.fixture
@@ -483,3 +486,82 @@ def test_debug_logs_bounded_content_snippet_never_full_content(
     for record in debug_records:
         assert long_content not in record.getMessage(), "full response content leaked at DEBUG"
         assert len(record.getMessage()) < len(long_content)
+
+
+# --- client-side timeouts (SPEC §8): a hang must surface, never run silent ---
+
+
+def test_client_is_configured_with_explicit_timeout_and_no_sdk_retries() -> None:
+    """The SDK defaults (600s read timeout, 2 silent internal retries) mean up to
+    30 minutes of no output per attempt. tenacity is the ONE visible retry layer."""
+    p = OpenAICompatibleProvider(api_key="k", base_url="https://example.test/v1")
+
+    assert p._client.max_retries == 0
+    assert p._client.timeout == DEFAULT_TIMEOUT_SECONDS
+
+
+def test_timeout_seconds_is_honoured() -> None:
+    p = OpenAICompatibleProvider(api_key="k", timeout_seconds=7.5)
+    assert p._client.timeout == 7.5
+
+
+def test_timeout_raises_distinct_error_not_generic_call_error(
+    provider: OpenAICompatibleProvider,
+) -> None:
+    """APITimeoutError subclasses APIConnectionError — if the except branches are
+    ordered wrong, every timeout silently becomes a generic LLMCallError."""
+    request = LLMRequest(messages=[LLMMessage(role="user", content="hi")], model="gpt-4")
+    timeout = openai.APITimeoutError(request=httpx.Request("POST", "https://example.test"))
+
+    with (
+        patch("tenacity.nap.time.sleep"),
+        patch.object(provider._client.chat.completions, "create", side_effect=timeout),
+        pytest.raises(LLMTimeoutError, match="timed out after"),
+    ):
+        provider.call(request)
+
+
+def test_timeout_is_retried_then_surfaces_within_a_bounded_wall_clock(
+    provider: OpenAICompatibleProvider,
+) -> None:
+    """Regression for the stuck-file bug: a non-responding provider must fail in
+    bounded time, not hang. Sleeps are patched, so this asserts the retry budget
+    terminates rather than measuring real backoff."""
+    import time
+
+    request = LLMRequest(
+        messages=[LLMMessage(role="user", content="hi")], model="gpt-4", retry_attempts=3
+    )
+    timeout = openai.APITimeoutError(request=httpx.Request("POST", "https://example.test"))
+
+    started = time.monotonic()
+    with (
+        patch("tenacity.nap.time.sleep"),
+        patch.object(
+            provider._client.chat.completions, "create", side_effect=timeout
+        ) as mock_create,
+    ):
+        with pytest.raises(LLMTimeoutError):
+            provider.call(request)
+    elapsed = time.monotonic() - started
+
+    assert mock_create.call_count == 3, "configured retry budget, no hidden SDK retries"
+    assert elapsed < 5.0, "must terminate, not hang"
+
+
+def test_timeout_logs_a_distinct_status(
+    provider: OpenAICompatibleProvider,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    request = LLMRequest(messages=[LLMMessage(role="user", content="hi")], model="gpt-4")
+    timeout = openai.APITimeoutError(request=httpx.Request("POST", "https://example.test"))
+
+    with (
+        patch("tenacity.nap.time.sleep"),
+        patch.object(provider._client.chat.completions, "create", side_effect=timeout),
+        caplog.at_level(logging.WARNING, logger="klustra"),
+    ):
+        with pytest.raises(LLMTimeoutError):
+            provider.call(request)
+
+    assert any("status=timeout" in r.message for r in caplog.records)

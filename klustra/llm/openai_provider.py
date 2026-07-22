@@ -10,9 +10,10 @@ from klustra.core.errors import (
     LLMCallError,
     LLMEmptyCompletionError,
     LLMRateLimitError,
+    LLMTimeoutError,
     LLMValidationError,
 )
-from klustra.llm.provider import LLMProvider, LLMRequest, LLMResponse
+from klustra.llm.provider import DEFAULT_TIMEOUT_SECONDS, LLMProvider, LLMRequest, LLMResponse
 from klustra.llm.retry import (
     call_with_corrective_retry,
     find_body_model_ref,
@@ -35,9 +36,23 @@ class OpenAICompatibleProvider(LLMProvider):
 
     name = "openai_compatible"
 
-    def __init__(self, api_key: str, base_url: str | None = None) -> None:
+    def __init__(
+        self,
+        api_key: str,
+        base_url: str | None = None,
+        timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+    ) -> None:
         url = base_url or _OPENAI_BASE_URLS["openai"]
-        self._client = openai.OpenAI(api_key=api_key, base_url=url)
+        # max_retries=0: tenacity (@llm_retry) is the ONE visible retry layer.
+        # The SDK's default of 2 retries happens inside a single blocking call,
+        # invisible to our logging — silence is the bug we are fixing.
+        self._client = openai.OpenAI(
+            api_key=api_key,
+            base_url=url,
+            timeout=timeout_seconds,
+            max_retries=0,
+        )
+        self._timeout_seconds = timeout_seconds
 
     def call(self, request: LLMRequest) -> LLMResponse:
         return call_with_corrective_retry(self._call_with_retry, request)
@@ -95,6 +110,18 @@ class OpenAICompatibleProvider(LLMProvider):
                     f"(requested_model={request.model!r}, body_model_ref={body_model!r})"
                 ) from exc
             raise LLMCallError(f"OpenAI API error {exc.status_code}: {exc.message}") from exc
+        except openai.APITimeoutError as exc:
+            # MUST precede APIConnectionError — APITimeoutError subclasses it,
+            # so the generic branch would otherwise swallow every timeout.
+            logger.warning(
+                "phase=llm action=llm_call status=timeout model=%r timeout_s=%.1f",
+                request.model,
+                self._timeout_seconds,
+            )
+            raise LLMTimeoutError(
+                f"OpenAI request to {request.model!r} timed out after "
+                f"{self._timeout_seconds}s (label={request.label!r})"
+            ) from exc
         except openai.APIConnectionError as exc:
             raise LLMCallError(f"OpenAI connection error: {exc}") from exc
         except openai.APIError as exc:
