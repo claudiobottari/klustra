@@ -1,5 +1,7 @@
 # klustra
 
+> ⚠️ **Work in progress.** Not production-ready. APIs and formats will change without notice. See [STATUS.md](STATUS.md) for current state.
+
 Recursive knowledge abstraction engine: heterogeneous files → an [OKF](https://github.com/GoogleCloudPlatform/knowledge-catalog)-style wiki of atomic concept pages → hierarchical cluster/home pages built by recursively clustering and summarizing those pages (RAPTOR pattern, applied to wiki pages instead of chunks). Point it at a folder of Excel sheets, Markdown, and text files; it ingests them deterministically, has an LLM extract and merge concepts with provenance, then recursively abstracts the result into a navigable domain wiki.
 
 Status: **v0.2.0** — core pipeline + hierarchy engine built and tested; see [STATUS.md](STATUS.md) for exactly what's implemented vs. still open.
