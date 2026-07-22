@@ -49,6 +49,7 @@ class HierarchyConfig(BaseModel):
     probability_threshold: float = 0.5
     model: str = "default"
     domain: str = "default"
+    retry_attempts: int | None = None
 
 
 class HierarchyResult(BaseModel):
@@ -120,6 +121,8 @@ def synthesize_cluster_page(
         ],
         model=config.model,
         response_schema=CLUSTER_PAGE_SCHEMA,
+        retry_attempts=config.retry_attempts,
+        label=f"hierarchy:cluster:l{level}:c{cluster_id}",
     )
     response = provider.call(request)
 
@@ -197,6 +200,8 @@ def synthesize_home_page(
         ],
         model=config.model,
         response_schema=CLUSTER_PAGE_SCHEMA,
+        retry_attempts=config.retry_attempts,
+        label=f"hierarchy:home:l{level}:{config.domain}",
     )
     response = provider.call(request)
 

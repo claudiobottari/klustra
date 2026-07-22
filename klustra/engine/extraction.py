@@ -26,12 +26,13 @@ def extract_concepts(
     model: str,
     sink: AccountingSink,
     max_tokens: int | None = None,
+    retry_attempts: int | None = None,
 ) -> list[ExtractionResult]:
     """Phase 1 extraction: LLM structured output for concept candidates (SPEC §5)."""
     results: list[ExtractionResult] = []
 
     for unit in units:
-        request = _build_request(unit, existing_index, model, max_tokens)
+        request = _build_request(unit, existing_index, model, max_tokens, retry_attempts, source_id)
         response = provider.call(request)
 
         sink.record(
@@ -60,6 +61,8 @@ def _build_request(
     existing_index: list[str],
     model: str,
     max_tokens: int | None,
+    retry_attempts: int | None = None,
+    source_id: str = "",
 ) -> LLMRequest:
     system_content = (
         "You are an extraction engine. Given a knowledge unit, identify concept candidates.\n"
@@ -82,6 +85,8 @@ def _build_request(
         model=model,
         max_tokens=max_tokens,
         response_schema=CONCEPT_CANDIDATES_SCHEMA,
+        retry_attempts=retry_attempts,
+        label=f"extraction:{source_id}:{unit.unit_id}",
     )
 
 

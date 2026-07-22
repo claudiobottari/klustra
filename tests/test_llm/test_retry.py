@@ -1,10 +1,19 @@
 from __future__ import annotations
 
 import pytest
+import tenacity
 
-from klustra.core.errors import LLMCallError, LLMValidationError
+from klustra.core.errors import LLMCallError, LLMRateLimitError, LLMValidationError
 from klustra.llm.provider import LLMMessage, LLMRequest, LLMResponse
-from klustra.llm.retry import DEFAULT_MAX_ATTEMPTS, call_with_corrective_retry, llm_retry
+from klustra.llm.retry import (
+    DEFAULT_MAX_ATTEMPTS,
+    _max_attempts_for,
+    _wait_strategy,
+    call_with_corrective_retry,
+    find_body_model_ref,
+    is_rate_limit_error,
+    llm_retry,
+)
 
 
 def test_default_max_attempts_is_three() -> None:
@@ -111,3 +120,65 @@ def test_corrective_retry_does_not_touch_transient_errors() -> None:
 
     with pytest.raises(LLMCallError, match="network down"):
         call_with_corrective_retry(call_fn, _request(), max_attempts=3)
+
+
+# --- retry_attempts wiring + rate-limit backoff differentiation ---
+
+
+def _fake_state(
+    exc: BaseException | None = None,
+    *,
+    attempt_number: int = 1,
+    args: tuple = (),
+) -> tenacity.RetryCallState:
+    state = tenacity.RetryCallState(retry_object=None, fn=None, args=args, kwargs={})
+    state.attempt_number = attempt_number
+    if exc is not None:
+        state.set_exception((type(exc), exc, None))
+    return state
+
+
+def test_max_attempts_uses_request_retry_attempts() -> None:
+    req = LLMRequest(messages=[LLMMessage(role="user", content="x")], model="m", retry_attempts=7)
+    state = _fake_state(args=(req,))
+    assert _max_attempts_for(state, DEFAULT_MAX_ATTEMPTS) == 7
+
+
+def test_max_attempts_falls_back_when_request_missing_or_unset() -> None:
+    state_no_request = _fake_state()
+    assert _max_attempts_for(state_no_request, DEFAULT_MAX_ATTEMPTS) == DEFAULT_MAX_ATTEMPTS
+
+    req = LLMRequest(messages=[LLMMessage(role="user", content="x")], model="m")
+    state_unset = _fake_state(args=(req,))
+    assert _max_attempts_for(state_unset, DEFAULT_MAX_ATTEMPTS) == DEFAULT_MAX_ATTEMPTS
+
+
+def test_wait_strategy_rate_limit_gets_longer_backoff_than_default() -> None:
+    rate_limit_wait = _wait_strategy(_fake_state(LLMRateLimitError("overloaded")))
+    default_wait = _wait_strategy(_fake_state(LLMCallError("boom")))
+    assert rate_limit_wait > default_wait
+    assert rate_limit_wait >= 2  # _RATE_LIMIT_WAIT min=2
+    assert default_wait >= 1  # _DEFAULT_WAIT min=1
+
+
+def test_is_rate_limit_error_on_status_code() -> None:
+    assert is_rate_limit_error(429, None) is True
+    assert is_rate_limit_error(500, None) is False
+
+
+def test_is_rate_limit_error_on_openrouter_provider_error_code() -> None:
+    body = {
+        "error": {
+            "message": "overloaded",
+            "metadata": {"provider_error_code": "engine_overloaded"},
+        }
+    }
+    assert is_rate_limit_error(503, body) is True
+    assert is_rate_limit_error(503, {"error": {"message": "unrelated"}}) is False
+
+
+def test_find_body_model_ref_finds_nested_model_key() -> None:
+    body = {"error": {"message": "x", "metadata": {"model": "deepseek/deepseek-chat"}}}
+    assert find_body_model_ref(body) == "deepseek/deepseek-chat"
+    assert find_body_model_ref({"error": {"message": "x"}}) is None
+    assert find_body_model_ref(None) is None

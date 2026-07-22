@@ -47,6 +47,7 @@ class IncrementalConfig(BaseModel):
     materiality_threshold: float = Field(default=0.10, ge=0.0, le=1.0)
     drift_threshold_percent: float = Field(default=0.30, ge=0.0, le=1.0)
     judge_model: str = "default"
+    judge_retry_attempts: int | None = None
 
 
 class IncrementalResult(BaseModel):
@@ -110,6 +111,7 @@ def judge_cluster(
     sink: AccountingSink,
     model: str,
     prompts: PromptRegistry | None = None,
+    retry_attempts: int | None = None,
 ) -> JudgeResult:
     """LLM judge: decide cluster action after member changes (SPEC §6.2)."""
     registry = prompts or PromptRegistry()
@@ -135,6 +137,8 @@ def judge_cluster(
         ],
         model=model,
         response_schema=JUDGE_SCHEMA,
+        retry_attempts=retry_attempts,
+        label=f"judge:{cluster_entity_id}",
     )
     response = provider.call(request)
 
@@ -253,6 +257,7 @@ def run_incremental(
             sink=sink,
             model=config.judge_model,
             prompts=prompts,
+            retry_attempts=config.judge_retry_attempts,
         )
         judged.append(judge_result)
 

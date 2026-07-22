@@ -1,13 +1,21 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 import anthropic
 
-from klustra.core.errors import LLMCallError, LLMValidationError
+from klustra.core.errors import LLMCallError, LLMRateLimitError, LLMValidationError
 from klustra.llm.provider import LLMProvider, LLMRequest, LLMResponse
-from klustra.llm.retry import call_with_corrective_retry, llm_retry
+from klustra.llm.retry import (
+    call_with_corrective_retry,
+    find_body_model_ref,
+    is_rate_limit_error,
+    llm_retry,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class AnthropicProvider(LLMProvider):
@@ -56,6 +64,22 @@ class AnthropicProvider(LLMProvider):
         try:
             response = self._client.messages.create(**kwargs)
         except anthropic.APIStatusError as exc:
+            if is_rate_limit_error(exc.status_code, exc.body):
+                body_model = find_body_model_ref(exc.body)
+                logger.warning(
+                    "[llm] rate-limited/overloaded calling model=%r "
+                    "(status=%d, body_model_ref=%r%s)",
+                    request.model,
+                    exc.status_code,
+                    body_model,
+                    ""
+                    if body_model in (None, request.model)
+                    else " -- MISMATCH vs requested model",
+                )
+                raise LLMRateLimitError(
+                    f"Anthropic API rate limit/overload {exc.status_code}: {exc.message} "
+                    f"(requested_model={request.model!r}, body_model_ref={body_model!r})"
+                ) from exc
             raise LLMCallError(f"Anthropic API error {exc.status_code}: {exc.message}") from exc
         except anthropic.APIConnectionError as exc:
             raise LLMCallError(f"Anthropic connection error: {exc}") from exc

@@ -195,6 +195,7 @@ class Klustra:
                 model=extraction_cfg.model,
                 sink=self._sink,
                 max_tokens=extraction_cfg.max_tokens,
+                retry_attempts=extraction_cfg.retry_attempts,
             )
             for er in extraction_results:
                 for candidate in er.candidates:
@@ -219,6 +220,7 @@ class Klustra:
                 model=librarian_cfg.model,
                 sink=self._sink,
                 max_tokens=librarian_cfg.max_tokens,
+                retry_attempts=librarian_cfg.retry_attempts,
                 run_id=run_id,
             )
             persist_librarian_result(result_lib, self.state, run_id=run_id)
@@ -533,9 +535,11 @@ class Klustra:
     def _build_hierarchy_config(self) -> HierarchyConfig:
         h = self.config.hierarchy
         model = "default"
+        retry_attempts = None
         hier_cfg = self.config.llm.hierarchy
         if hier_cfg is not None:
             model = hier_cfg.model
+            retry_attempts = hier_cfg.retry_attempts
         return HierarchyConfig(
             mode=h.mode,
             min_cluster_size=h.min_cluster_size,
@@ -543,18 +547,22 @@ class Klustra:
             probability_threshold=h.probability_threshold,
             model=model,
             domain="default",
+            retry_attempts=retry_attempts,
         )
 
     def _build_incremental_config(self) -> IncrementalConfig:
         h = self.config.hierarchy
         judge_model = "default"
+        judge_retry_attempts = None
         judge_cfg = self.config.llm.judge
         if judge_cfg is not None:
             judge_model = judge_cfg.model
+            judge_retry_attempts = judge_cfg.retry_attempts
         return IncrementalConfig(
             materiality_threshold=h.materiality_threshold,
             drift_threshold_percent=h.drift_threshold_percent,
             judge_model=judge_model,
+            judge_retry_attempts=judge_retry_attempts,
         )
 
     def _embed_nodes(

@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from klustra.core.errors import LLMCallError, LLMEmptyCompletionError, LLMValidationError
+from klustra.core.errors import (
+    LLMCallError,
+    LLMEmptyCompletionError,
+    LLMRateLimitError,
+    LLMValidationError,
+)
 from klustra.llm.openai_provider import OpenAICompatibleProvider
 from klustra.llm.provider import LLMMessage, LLMRequest
 
@@ -322,3 +328,124 @@ def test_invalid_json_error_carries_truncation_diagnostics(
     assert "finish_reason='length'" in msg
     assert "max_tokens=64" in msg
     assert exc_info.value.raw_content == '{"x": "cut off mid stri'
+
+
+# --- 429 / rate-limit backoff (separate from the corrective-JSON loop above) ---
+
+
+def _status_error(status_code: int, body: object = None, message: str = "err") -> Any:
+    import openai
+
+    return openai.APIStatusError(
+        message=message,
+        response=MagicMock(status_code=status_code, headers={}),
+        body=body,
+    )
+
+
+def test_429_retried_with_configured_attempts_and_longer_backoff_succeeds_later(
+    provider: OpenAICompatibleProvider,
+) -> None:
+    """A 429 is classified as LLMRateLimitError and retried up to the request's
+    configured retry_attempts (LLMRoleConfig.retry_attempts), with the rate-limit
+    backoff (not the default one) — separate attempt budget from the corrective
+    JSON-retry loop tested above."""
+    request = LLMRequest(
+        messages=[LLMMessage(role="user", content="hi")],
+        model="deepseek/deepseek-v4-flash",
+        retry_attempts=4,
+    )
+    rate_limited = _status_error(429, body={"error": {"message": "rate limited"}})
+    good = _mock_completion("Hello!", prompt_tokens=12, completion_tokens=7)
+    with (
+        patch("tenacity.nap.time.sleep"),
+        patch.object(
+            provider._client.chat.completions,
+            "create",
+            side_effect=[rate_limited, rate_limited, rate_limited, good],
+        ) as mock_create,
+    ):
+        response = provider.call(request)
+    assert response.content == "Hello!"
+    assert mock_create.call_count == 4
+
+
+def test_429_exhausts_configured_attempts_raises_rate_limit_error(
+    provider: OpenAICompatibleProvider,
+) -> None:
+    request = LLMRequest(
+        messages=[LLMMessage(role="user", content="hi")],
+        model="gpt-4",
+        retry_attempts=2,
+    )
+    rate_limited = _status_error(429)
+    with (
+        patch("tenacity.nap.time.sleep"),
+        patch.object(
+            provider._client.chat.completions,
+            "create",
+            side_effect=[rate_limited, rate_limited],
+        ) as mock_create,
+        pytest.raises(LLMRateLimitError),
+    ):
+        provider.call(request)
+    assert mock_create.call_count == 2
+
+
+def test_openrouter_engine_overloaded_classified_as_rate_limit_even_without_429(
+    provider: OpenAICompatibleProvider,
+) -> None:
+    """OpenRouter can signal overload via provider_error_code without a 429 status."""
+    request = LLMRequest(
+        messages=[LLMMessage(role="user", content="hi")],
+        model="gpt-4",
+        retry_attempts=2,
+    )
+    overloaded = _status_error(
+        503,
+        body={"error": {"metadata": {"provider_error_code": "engine_overloaded"}}},
+    )
+    good = _mock_completion("Hello!", prompt_tokens=12, completion_tokens=7)
+    with (
+        patch("tenacity.nap.time.sleep"),
+        patch.object(
+            provider._client.chat.completions,
+            "create",
+            side_effect=[overloaded, good],
+        ) as mock_create,
+    ):
+        response = provider.call(request)
+    assert response.content == "Hello!"
+    assert mock_create.call_count == 2
+
+
+def test_429_logs_requested_model_and_body_model_ref(
+    provider: OpenAICompatibleProvider,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """When a 429 fires, the log must carry the exact model string we requested
+    plus whatever model reference the error body carries — so a routing-name
+    mismatch (vs. a real one) is diagnosable without guessing."""
+    request = LLMRequest(
+        messages=[LLMMessage(role="user", content="hi")],
+        model="deepseek/deepseek-v4-flash",
+        retry_attempts=2,
+    )
+    rate_limited = _status_error(
+        429,
+        body={"error": {"message": "rate limited", "model": "deepseek/deepseek-chat"}},
+    )
+    good = _mock_completion("Hello!", prompt_tokens=12, completion_tokens=7)
+    with (
+        patch("tenacity.nap.time.sleep"),
+        patch.object(
+            provider._client.chat.completions,
+            "create",
+            side_effect=[rate_limited, good],
+        ),
+        caplog.at_level("WARNING"),
+    ):
+        provider.call(request)
+    warning_text = "\n".join(r.message for r in caplog.records)
+    assert "deepseek/deepseek-v4-flash" in warning_text
+    assert "deepseek/deepseek-chat" in warning_text

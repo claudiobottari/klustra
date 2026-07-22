@@ -37,10 +37,13 @@ def merge_and_generate(
     model: str,
     sink: AccountingSink,
     max_tokens: int | None = None,
+    retry_attempts: int | None = None,
     run_id: str = "",
 ) -> LibrarianResult:
     """Phase 2 Librarian: synthesize a Page from multi-source contributions (SPEC §5)."""
-    request = _build_request(entity_id, contributions, existing_index, model, max_tokens)
+    request = _build_request(
+        entity_id, contributions, existing_index, model, max_tokens, retry_attempts
+    )
     response = provider.call(request)
 
     sink.record(
@@ -128,6 +131,7 @@ def _build_request(
     existing_index: list[str],
     model: str,
     max_tokens: int | None,
+    retry_attempts: int | None = None,
 ) -> LLMRequest:
     system_content = (
         "You are a Librarian. Synthesize a wiki page from multiple source contributions.\n\n"
@@ -168,6 +172,8 @@ def _build_request(
         model=model,
         max_tokens=max_tokens,
         response_schema=LIBRARIAN_SCHEMA,
+        retry_attempts=retry_attempts,
+        label=f"librarian:{entity_id}",
     )
 
 
@@ -190,6 +196,8 @@ def _build_retry_request(original: LLMRequest, response: LLMResponse) -> LLMRequ
         max_tokens=original.max_tokens,
         response_schema=original.response_schema,
         temperature=original.temperature,
+        retry_attempts=original.retry_attempts,
+        label=original.label,
     )
 
 

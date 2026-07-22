@@ -21,6 +21,10 @@ class LLMRequest(BaseModel):
     max_tokens: int | None = None
     response_schema: dict[str, Any] | None = None
     temperature: float = 0.0
+    retry_attempts: int | None = None
+    """Per-role transient-failure retry budget (LLMRoleConfig.retry_attempts). None = default."""
+    label: str | None = None
+    """Human-readable call context for progress/retry logging, e.g. "librarian:iec_62067"."""
 
 
 class LLMResponse(BaseModel):

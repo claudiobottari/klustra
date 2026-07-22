@@ -46,6 +46,15 @@ class LLMEmptyCompletionError(LLMCallError):
     """Model returned an empty or whitespace-only completion — treated as transient."""
 
 
+class LLMRateLimitError(LLMCallError):
+    """Provider signaled rate limiting or overload (HTTP 429, or an OpenRouter
+    provider_error_code like 'engine_overloaded' in the error body).
+
+    Resolves in seconds-to-minutes, not milliseconds — gets a longer backoff
+    than other transient LLMCallErrors (see llm/retry.py's wait strategy).
+    """
+
+
 class LLMValidationError(LLMError):
     """LLM response did not conform to the expected JSON schema.
 
