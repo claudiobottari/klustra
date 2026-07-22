@@ -7,7 +7,7 @@ import anthropic
 
 from klustra.core.errors import LLMCallError, LLMValidationError
 from klustra.llm.provider import LLMProvider, LLMRequest, LLMResponse
-from klustra.llm.retry import llm_retry
+from klustra.llm.retry import call_with_corrective_retry, llm_retry
 
 
 class AnthropicProvider(LLMProvider):
@@ -19,8 +19,7 @@ class AnthropicProvider(LLMProvider):
         self._client = anthropic.Anthropic(api_key=api_key)
 
     def call(self, request: LLMRequest) -> LLMResponse:
-        result: LLMResponse = self._call_with_retry(request)
-        return result
+        return call_with_corrective_retry(self._call_with_retry, request)
 
     @llm_retry()
     def _call_with_retry(self, request: LLMRequest) -> LLMResponse:

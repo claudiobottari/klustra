@@ -245,3 +245,80 @@ def test_malformed_response_matrix_always_raises_empty_completion_error(
         pytest.raises(LLMEmptyCompletionError),
     ):
         provider.call(request)
+
+
+def test_invalid_json_corrective_retry_feeds_error_back(
+    provider: OpenAICompatibleProvider,
+) -> None:
+    """Invalid JSON triggers a corrective retry whose API call carries the parse
+    error and a snippet of the bad response, then succeeds."""
+    schema = {"type": "object", "properties": {"x": {"type": "integer"}}}
+    request = LLMRequest(
+        messages=[LLMMessage(role="user", content="give x")],
+        model="gpt-4",
+        response_schema=schema,
+    )
+    bad = _mock_completion('```json\n{"x": 42}\n```')
+    good = _mock_completion('{"x": 42}')
+    with patch.object(
+        provider._client.chat.completions,
+        "create",
+        side_effect=[bad, good],
+    ) as mock_create:
+        response = provider.call(request)
+    assert response.parsed == {"x": 42}
+    assert mock_create.call_count == 2
+
+    retry_messages = mock_create.call_args_list[1].kwargs["messages"]
+    assert retry_messages[0] == {"role": "user", "content": "give x"}
+    assert retry_messages[1]["role"] == "assistant"
+    assert "```json" in retry_messages[1]["content"], "snippet of the bad response fed back"
+    assert retry_messages[2]["role"] == "user"
+    assert "REJECTED" in retry_messages[2]["content"]
+    assert "not valid JSON" in retry_messages[2]["content"]
+    assert "no markdown fences" in retry_messages[2]["content"]
+
+
+def test_invalid_json_exhausts_corrective_retries(
+    provider: OpenAICompatibleProvider,
+) -> None:
+    request = LLMRequest(
+        messages=[LLMMessage(role="user", content="give x")],
+        model="gpt-4",
+        response_schema={"type": "object"},
+    )
+    with patch.object(
+        provider._client.chat.completions,
+        "create",
+        return_value=_mock_completion("not json"),
+    ) as mock_create:
+        with pytest.raises(LLMValidationError, match="not valid JSON"):
+            provider.call(request)
+    assert mock_create.call_count == 3
+
+
+def test_invalid_json_error_carries_truncation_diagnostics(
+    provider: OpenAICompatibleProvider,
+) -> None:
+    """The validation error reports response length, finish_reason, and max_tokens
+    so a max_tokens truncation ('length') is diagnosable from the message alone."""
+    request = LLMRequest(
+        messages=[LLMMessage(role="user", content="give x")],
+        model="gpt-4",
+        response_schema={"type": "object"},
+        max_tokens=64,
+    )
+    truncated = _mock_completion('{"x": "cut off mid stri')
+    truncated.choices[0].finish_reason = "length"
+    with patch.object(
+        provider._client.chat.completions,
+        "create",
+        return_value=truncated,
+    ):
+        with pytest.raises(LLMValidationError) as exc_info:
+            provider.call(request)
+    msg = str(exc_info.value)
+    assert "response_chars=23" in msg
+    assert "finish_reason='length'" in msg
+    assert "max_tokens=64" in msg
+    assert exc_info.value.raw_content == '{"x": "cut off mid stri'

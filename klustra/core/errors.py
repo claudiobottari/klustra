@@ -47,7 +47,16 @@ class LLMEmptyCompletionError(LLMCallError):
 
 
 class LLMValidationError(LLMError):
-    """LLM response did not conform to the expected JSON schema."""
+    """LLM response did not conform to the expected JSON schema.
+
+    Carries the raw model output (when available) so the corrective-retry loop
+    can feed the bad response back to the model as context (CLAUDE.md rule 3:
+    validation failure = retry with error feedback, then hard fail).
+    """
+
+    def __init__(self, message: str, *, raw_content: str | None = None) -> None:
+        super().__init__(message)
+        self.raw_content = raw_content
 
 
 class LLMKeyMissingError(LLMError):

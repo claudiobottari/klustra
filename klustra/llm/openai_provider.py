@@ -7,7 +7,7 @@ import openai
 
 from klustra.core.errors import LLMCallError, LLMEmptyCompletionError, LLMValidationError
 from klustra.llm.provider import LLMProvider, LLMRequest, LLMResponse
-from klustra.llm.retry import llm_retry
+from klustra.llm.retry import call_with_corrective_retry, llm_retry
 
 _OPENAI_BASE_URLS: dict[str, str] = {
     "openai": "https://api.openai.com/v1",
@@ -25,8 +25,7 @@ class OpenAICompatibleProvider(LLMProvider):
         self._client = openai.OpenAI(api_key=api_key, base_url=url)
 
     def call(self, request: LLMRequest) -> LLMResponse:
-        result: LLMResponse = self._call_with_retry(request)
-        return result
+        return call_with_corrective_retry(self._call_with_retry, request)
 
     @llm_retry()
     def _call_with_retry(self, request: LLMRequest) -> LLMResponse:
@@ -89,7 +88,15 @@ class OpenAICompatibleProvider(LLMProvider):
             try:
                 parsed = json.loads(content)
             except json.JSONDecodeError as exc:
-                raise LLMValidationError(f"Response is not valid JSON: {exc}") from exc
+                # finish_reason == "length" is the definitive max_tokens-truncation
+                # signal; report it alongside sizes so recurrences are diagnosable.
+                max_tok = "not set" if request.max_tokens is None else request.max_tokens
+                raise LLMValidationError(
+                    f"Response is not valid JSON: {exc} "
+                    f"(response_chars={len(content)}, tokens_out={tokens_out}, "
+                    f"finish_reason={choice.finish_reason!r}, max_tokens={max_tok})",
+                    raw_content=content,
+                ) from exc
 
         return LLMResponse(
             content=content,
