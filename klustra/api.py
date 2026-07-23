@@ -180,6 +180,10 @@ class Klustra:
 
         logger.info("[compile] starting: %d source(s)", len(sources))
 
+        # One registry for the whole run so a .klustra/prompts override is
+        # resolved once, not per call (mirrors hierarchy()).
+        prompts = PromptRegistry()
+
         extraction_cfg = self.config.llm.extraction
         librarian_cfg = self.config.llm.librarian
         if extraction_cfg is None:
@@ -234,6 +238,7 @@ class Klustra:
                     extraction_cfg=extraction_cfg,
                     sha256=source_hashes.get(source_id, ""),
                     run_id=run_id,
+                    prompts=prompts,
                 )
 
             for entity_id in entity_ids:
@@ -269,6 +274,7 @@ class Klustra:
                 max_tokens=librarian_cfg.max_tokens,
                 retry_attempts=librarian_cfg.retry_attempts,
                 run_id=run_id,
+                prompts=prompts,
             )
             persist_librarian_result(result_lib, self.state, run_id=run_id)
             self._write_body(result_lib.page.entity_id, result_lib.body_md)
@@ -338,6 +344,7 @@ class Klustra:
         extraction_cfg: LLMRoleConfig,
         sha256: str,
         run_id: str,
+        prompts: PromptRegistry | None = None,
     ) -> list[str]:
         """Run Phase 1 for one source and checkpoint the result."""
         self._put_checkpoint(source_id, "in_progress", sha256, [], run_id)
@@ -352,6 +359,7 @@ class Klustra:
                 max_tokens=extraction_cfg.max_tokens,
                 retry_attempts=extraction_cfg.retry_attempts,
                 max_input_tokens=self.config.extraction.max_input_tokens,
+                prompts=prompts,
             )
         except Exception:
             self._put_checkpoint(source_id, "failed", sha256, [], run_id)

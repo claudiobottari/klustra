@@ -248,3 +248,34 @@ def test_extract_concepts_empty_units(mock_provider: MockProvider) -> None:
     )
     assert results == []
     assert len(sink.entries) == 0
+
+
+def test_extraction_build_request_prompts_match_pre_migration_text() -> None:
+    """Prompt text moved into extraction.system.md / extraction.user.md."""
+    from klustra.engine.extraction import _build_request
+
+    unit = KnowledgeUnit(unit_id="s#1", kind="narrative", content_md="Body text.", locator="doc:1")
+    request = _build_request(unit, ["mat.xlpe"], "m", None)
+
+    assert request.messages[0].content == (
+        "You are an extraction engine. Given a knowledge unit, identify concept candidates.\n"
+        "Return structured JSON with a list of candidates.\n"
+        "Each candidate has: name, entity_id_proposal (dot-separated lowercase), summary, "
+        "is_new (true if not in existing index), related_existing (entity_ids from index)."
+    )
+    assert request.messages[1].content == (
+        "## Existing entity index\nmat.xlpe\n\n"
+        "## Knowledge unit [narrative]\nLocator: doc:1\n\nBody text."
+    )
+
+
+def test_extraction_user_prompt_uses_the_chunk_not_the_whole_unit() -> None:
+    """Chunked calls must template the chunk body, not unit.content_md."""
+    from klustra.engine.extraction import _build_request
+
+    unit = KnowledgeUnit(unit_id="s#1", kind="narrative", content_md="WHOLE UNIT", locator="doc:1")
+    request = _build_request(unit, [], "m", None, content="JUST THIS CHUNK")
+
+    assert "JUST THIS CHUNK" in request.messages[1].content
+    assert "WHOLE UNIT" not in request.messages[1].content
+    assert "(empty)" in request.messages[1].content

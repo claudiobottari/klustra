@@ -17,6 +17,7 @@ from klustra.llm import (
     LLMProvider,
     LLMRequest,
     LLMResponse,
+    PromptRegistry,
     TokenRecord,
 )
 from klustra.llm.tokens import count_tokens
@@ -40,6 +41,7 @@ def extract_concepts(
     max_tokens: int | None = None,
     retry_attempts: int | None = None,
     max_input_tokens: int = DEFAULT_MAX_INPUT_TOKENS,
+    prompts: PromptRegistry | None = None,
 ) -> list[ExtractionResult]:
     """Phase 1 extraction: LLM structured output for concept candidates (SPEC §5).
 
@@ -63,7 +65,7 @@ def extract_concepts(
             chars=len(unit.content_md),
             heartbeat=True,
         ):
-            chunks = _chunks_for(unit, existing_index, max_input_tokens)
+            chunks = _chunks_for(unit, existing_index, max_input_tokens, prompts)
         if len(chunks) > 1:
             logger.info(
                 "[compile] chunking triggered: %d chunks, source_id=%s, unit_id=%s, "
@@ -86,7 +88,14 @@ def extract_concepts(
                     unit.unit_id,
                 )
             request = _build_request(
-                unit, existing_index, model, max_tokens, retry_attempts, source_id, chunk
+                unit,
+                existing_index,
+                model,
+                max_tokens,
+                retry_attempts,
+                source_id,
+                chunk,
+                prompts=prompts,
             )
             input_tokens = _verify_bounds(request, max_input_tokens, unit.unit_id)
             with log_op(
@@ -132,9 +141,10 @@ def _chunks_for(
     unit: KnowledgeUnit,
     existing_index: list[str],
     max_input_tokens: int,
+    prompts: PromptRegistry | None = None,
 ) -> list[str]:
     """Content budget = ceiling minus the real cost of the prompt scaffolding."""
-    scaffolding = _build_request(unit, existing_index, "", None, None, "", "")
+    scaffolding = _build_request(unit, existing_index, "", None, None, "", "", prompts=prompts)
     overhead = sum(count_tokens(m.content) for m in scaffolding.messages)
     budget = max_input_tokens - overhead
     if budget < _MIN_CONTENT_TOKENS:
@@ -167,21 +177,21 @@ def _build_request(
     retry_attempts: int | None = None,
     source_id: str = "",
     content: str | None = None,
+    prompts: PromptRegistry | None = None,
+    domain_instructions: str = "",
 ) -> LLMRequest:
-    system_content = (
-        "You are an extraction engine. Given a knowledge unit, identify concept candidates.\n"
-        "Return structured JSON with a list of candidates.\n"
-        "Each candidate has: name, entity_id_proposal (dot-separated lowercase), "
-        "summary, is_new (true if not in existing index), related_existing (entity_ids from index)."
-    )
+    registry = prompts or PromptRegistry()
 
-    index_str = ", ".join(existing_index) if existing_index else "(empty)"
-    body = unit.content_md if content is None else content
-    user_content = (
-        f"## Existing entity index\n{index_str}\n\n"
-        f"## Knowledge unit [{unit.kind}]\nLocator: {unit.locator}\n\n{body}"
+    system_content = registry.render(
+        "extraction", kind="system", domain_instructions=domain_instructions
     )
-
+    user_content = registry.render(
+        "extraction",
+        kind="user",
+        index_str=", ".join(existing_index) if existing_index else "(empty)",
+        unit=unit,
+        content=unit.content_md if content is None else content,
+    )
     return LLMRequest(
         messages=[
             LLMMessage(role="system", content=system_content),

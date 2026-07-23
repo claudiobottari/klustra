@@ -392,8 +392,13 @@ Retry with backoff (default 3), rate limiting, structured output via JSON schema
 
 ## 10. Prompt customization
 
-- Defaults ship in the package (`klustra/llm/prompts/*.md`, Jinja2).
-- Override: `.klustra/prompts/{role}.md` (full replacement) or `.klustra/instructions/{domain}.md` (**injected** into every prompt for that domain: company context, tag taxonomy, entity-vs-record rule, glossary). User-authored, never rewritten by the system.
+- Defaults ship in the package (`klustra/llm/prompts/*.md`, Jinja2). **No role prompt may be built as an inline string in Python** — `PromptRegistry.render()` is the only source of prompt text.
+- Naming: `<role>[.<kind>][.<version>].md`, `kind ∈ {system, user}`, `version` e.g. `v2`. Resolution drops the most specific segment until a file matches, so `librarian.system.v2.md` → `librarian.system.md` → `librarian.md`. Call sites pass `role`/`kind` and never a bare filename, so adding a version later is additive. The single-file roles that predate the split (`hierarchy.md`, `home.md`, `judge.md`) resolve unchanged.
+- Templates render with `undefined=StrictUndefined`: a missing variable raises instead of silently producing an empty span. Optional values (e.g. `domain_instructions`) are defaulted in the Python signature, never left undefined in the template.
+- Structured data reaches templates as **template context, not concatenated strings** — `entity_id`, `contributions`, `existing_index`, and the librarian's numbered `rules` list (kept as discrete entries in `LIBRARIAN_RULES` so a diff can target one rule).
+- Bounds stated in a JSON schema are restated in the system prompt (CLAUDE.md rule 10); the confidence `[0.0, 1.0]` wording lives in `LIBRARIAN_RULES` and is asserted by test.
+- Override: `.klustra/prompts/{role}.md` (full replacement) or `.klustra/instructions/{domain}.md` (company context, tag taxonomy, entity-vs-record rule, glossary). User-authored, never rewritten by the system.
+- **Not yet wired (v0.1):** the `.klustra/instructions/{domain}.md` content is scaffolded by `klustra init` and validated by `klustra domain check`, but nothing reads it into a prompt. Role templates now expose a `{% if domain_instructions %}` insertion point and the engine accepts a `domain_instructions` argument, so wiring is a one-line change once `compile` carries domain identity (it currently iterates `state.list_sources()` with no domain concept — see §5.3). Likewise `PromptRegistry(override_dir=…)` is implemented but never constructed with an override dir by `api.py`, so the `.klustra/prompts/` tier is inert.
 - `klustra prompts show ROLE` / `klustra prompts diff` for transparency.
 
 ## 11. Exporters

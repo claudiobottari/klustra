@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from jinja2 import BaseLoader, Environment, TemplateNotFound
+from jinja2 import BaseLoader, Environment, StrictUndefined, TemplateNotFound
 
 
 class _OverrideLoader(BaseLoader):
@@ -39,10 +39,42 @@ class PromptRegistry:
         self._env = Environment(
             loader=_OverrideLoader(package_dir, override_dir),
             keep_trailing_newline=True,
+            # A prompt silently missing a variable is a corrupted prompt, not a
+            # cosmetic defect — Jinja2's default renders undefined as "".
+            undefined=StrictUndefined,
         )
 
-    def render(self, role: str, **context: Any) -> str:
-        template = self._env.get_template(f"{role}.md")
+    def template_name(self, role: str, kind: str | None = None, version: str | None = None) -> str:
+        """Resolve a template filename: `<role>[.<kind>][.<version>].md`.
+
+        `kind` is system|user for roles that template both sides. `version`
+        (e.g. "v2") lets a role gain a new revision without touching call
+        sites; unversioned stays the active default. Both fall back to the
+        plainer name when the more specific file does not exist, so the
+        original `<role>.md` templates keep resolving unchanged.
+        """
+        segments = [s for s in (role, kind, version) if s]
+        while len(segments) > 1:
+            candidate = ".".join(segments) + ".md"
+            if self._exists(candidate):
+                return candidate
+            segments.pop()  # drop the most specific segment and retry
+        return f"{role}.md"
+
+    def _exists(self, name: str) -> bool:
+        if self._override_dir is not None and (self._override_dir / name).is_file():
+            return True
+        return (self._package_dir / name).is_file()
+
+    def render(
+        self,
+        role: str,
+        *,
+        kind: str | None = None,
+        version: str | None = None,
+        **context: Any,
+    ) -> str:
+        template = self._env.get_template(self.template_name(role, kind, version))
         return template.render(**context)
 
     def list_roles(self) -> list[str]:

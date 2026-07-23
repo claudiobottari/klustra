@@ -22,11 +22,28 @@ from klustra.llm import (
     LLMProvider,
     LLMRequest,
     LLMResponse,
+    PromptRegistry,
     TokenRecord,
 )
 from klustra.logging_setup import log_op
 
 _CITATION_RE = re.compile(r"\^\[.+?\]")
+
+LIBRARIAN_RULES: list[str] = [
+    "Every factual claim MUST have a citation: ^[source_id:locator]",
+    "If sources conflict, the most recent claim wins. Put the discarded claim in a "
+    "'## Storia e revisioni' section with its ^[source_id:locator] reference. "
+    "NEVER silently drop claims.",
+    "Use ONLY wikilinks from the provided entity index: [[entity_id]]. NEVER invent link targets.",
+    "Write a coherent synthesis, not a list of per-source summaries.",
+    "A page without citations will be REJECTED.",
+    # Bound stated in the prompt as well as in LIBRARIAN_SCHEMA — CLAUDE.md rule 10:
+    # a third-party model treats the schema as best-effort, so say it twice.
+    "confidence: a number in [0.0, 1.0] representing your certainty in this "
+    "synthesis — do NOT use a 1–10 scale.",
+]
+"""Numbered rules for librarian.system.md, kept as discrete entries so a future
+diff can target one rule instead of a wall of prose."""
 
 
 def merge_and_generate(
@@ -40,10 +57,19 @@ def merge_and_generate(
     max_tokens: int | None = None,
     retry_attempts: int | None = None,
     run_id: str = "",
+    prompts: PromptRegistry | None = None,
+    domain_instructions: str = "",
 ) -> LibrarianResult:
     """Phase 2 Librarian: synthesize a Page from multi-source contributions (SPEC §5)."""
     request = _build_request(
-        entity_id, contributions, existing_index, model, max_tokens, retry_attempts
+        entity_id,
+        contributions,
+        existing_index,
+        model,
+        max_tokens,
+        retry_attempts,
+        prompts=prompts,
+        domain_instructions=domain_instructions,
     )
     with log_op(
         "librarian_merge",
@@ -149,37 +175,24 @@ def _build_request(
     model: str,
     max_tokens: int | None,
     retry_attempts: int | None = None,
+    prompts: PromptRegistry | None = None,
+    domain_instructions: str = "",
 ) -> LLMRequest:
-    system_content = (
-        "You are a Librarian. Synthesize a wiki page from multiple source contributions.\n\n"
-        "RULES:\n"
-        "1. Every factual claim MUST have a citation: ^[source_id:locator]\n"
-        "2. If sources conflict, the most recent claim wins. "
-        "Put the discarded claim in a '## Storia e revisioni' section "
-        "with its ^[source_id:locator] reference. NEVER silently drop claims.\n"
-        "3. Use ONLY wikilinks from the provided entity index: [[entity_id]]. "
-        "NEVER invent link targets.\n"
-        "4. Write a coherent synthesis, not a list of per-source summaries.\n"
-        "5. A page without citations will be REJECTED.\n"
-        "6. confidence: a number in [0.0, 1.0] representing your certainty "
-        "in this synthesis — do NOT use a 1\u201310 scale."
+    registry = prompts or PromptRegistry()
+
+    system_content = registry.render(
+        "librarian",
+        kind="system",
+        rules=LIBRARIAN_RULES,
+        domain_instructions=domain_instructions,
     )
-
-    parts: list[str] = [f"## Entity: {entity_id}\n"]
-
-    if existing_index:
-        parts.append("## Valid wikilink targets")
-        parts.append(", ".join(existing_index))
-        parts.append("")
-
-    for contrib in contributions:
-        parts.append(f"## Source: {contrib.source_id} ({contrib.source_path})")
-        for unit in contrib.units:
-            parts.append(f"### [{unit.kind}] {unit.locator}")
-            parts.append(unit.content_md)
-            parts.append("")
-
-    user_content = "\n".join(parts)
+    user_content = registry.render(
+        "librarian",
+        kind="user",
+        entity_id=entity_id,
+        existing_index=existing_index,
+        contributions=contributions,
+    )
 
     return LLMRequest(
         messages=[

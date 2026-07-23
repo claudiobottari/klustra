@@ -387,3 +387,85 @@ class TestPersistResult:
         args = store.set_links.call_args
         assert args[0][0] == "prod.cable.p-laser-320kv"
         assert "mat.xlpe" in args[0][1]
+
+
+# --- prompt extraction into the registry (SPEC §10) ---
+
+
+def test_build_request_prompts_match_pre_migration_text() -> None:
+    """The prompt text moved from an inline string into librarian.system.md /
+    librarian.user.md — the rendered bytes must be unchanged."""
+    from klustra.core.knowledge_unit import KnowledgeUnit
+    from klustra.engine.librarian import _build_request
+    from klustra.engine.models import SourceContribution
+
+    unit = KnowledgeUnit(unit_id="s#1", kind="narrative", content_md="Body text.", locator="doc:1")
+    contributions = [SourceContribution(source_id="src1", source_path="/a/b.md", units=[unit])]
+    request = _build_request("mat.xlpe", contributions, ["mat.xlpe"], "m", None)
+
+    assert request.messages[0].content == (
+        "You are a Librarian. Synthesize a wiki page from multiple source contributions.\n"
+        "\n"
+        "RULES:\n"
+        "1. Every factual claim MUST have a citation: ^[source_id:locator]\n"
+        "2. If sources conflict, the most recent claim wins. Put the discarded claim in a "
+        "'## Storia e revisioni' section with its ^[source_id:locator] reference. "
+        "NEVER silently drop claims.\n"
+        "3. Use ONLY wikilinks from the provided entity index: [[entity_id]]. "
+        "NEVER invent link targets.\n"
+        "4. Write a coherent synthesis, not a list of per-source summaries.\n"
+        "5. A page without citations will be REJECTED.\n"
+        "6. confidence: a number in [0.0, 1.0] representing your certainty in this "
+        "synthesis — do NOT use a 1–10 scale."
+    )
+    assert request.messages[1].content == (
+        "## Entity: mat.xlpe\n"
+        "\n"
+        "## Valid wikilink targets\n"
+        "mat.xlpe\n"
+        "\n"
+        "## Source: src1 (/a/b.md)\n"
+        "### [narrative] doc:1\n"
+        "Body text.\n"
+    )
+    # Non-prompt request construction is untouched.
+    assert request.label == "librarian:mat.xlpe"
+    assert request.response_schema is not None
+
+
+def test_build_request_user_prompt_omits_empty_index_section() -> None:
+    from klustra.core.knowledge_unit import KnowledgeUnit
+    from klustra.engine.librarian import _build_request
+    from klustra.engine.models import SourceContribution
+
+    unit = KnowledgeUnit(unit_id="s#1", kind="table", content_md="| a |", locator="sheet:1")
+    contributions = [SourceContribution(source_id="s1", source_path="/x.xlsx", units=[unit])]
+    request = _build_request("e.1", contributions, [], "m", None)
+
+    assert "Valid wikilink targets" not in request.messages[1].content
+    assert request.messages[1].content == (
+        "## Entity: e.1\n\n## Source: s1 (/x.xlsx)\n### [table] sheet:1\n| a |\n"
+    )
+
+
+def test_build_request_accepts_a_shared_registry() -> None:
+    import tempfile
+    from pathlib import Path as _Path
+
+    from klustra.core.knowledge_unit import KnowledgeUnit
+    from klustra.engine.librarian import _build_request
+    from klustra.engine.models import SourceContribution
+    from klustra.llm import PromptRegistry
+
+    with tempfile.TemporaryDirectory() as tmp:
+        override = _Path(tmp) / "prompts"
+        override.mkdir()
+        (override / "librarian.system.md").write_text("OVERRIDDEN", encoding="utf-8")
+
+        unit = KnowledgeUnit(unit_id="s#1", kind="narrative", content_md="b", locator="doc:1")
+        contributions = [SourceContribution(source_id="s1", source_path="/x.md", units=[unit])]
+        request = _build_request(
+            "e.1", contributions, [], "m", None, prompts=PromptRegistry(override_dir=override)
+        )
+
+    assert request.messages[0].content == "OVERRIDDEN"

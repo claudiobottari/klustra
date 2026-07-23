@@ -18,7 +18,7 @@ klustra/hierarchy/     embeddings.py (ABC only), clustering.py, pages.py,
 klustra/exporters/     exporter.py (ABC + registry), obsidian.py, okf_bundle.py            SPEC §11
 klustra/llm/           provider.py (ABC), openai_provider.py, anthropic_provider.py,
                        mock_provider.py, retry.py, tokens.py, accounting.py,
-                       prompts.py, prompts/*.md                                           SPEC §8, §9, §10
+                       prompts.py, prompts/<role>[.<kind>].md                             SPEC §8, §9, §10
 klustra/api.py         class Klustra — the only public facade                             SPEC §4.3, §12
 klustra/logging_setup.py  configure_logging (CLI verbosity) + log_op progress contract    SPEC §13.1
 klustra/cli.py         typer app, thin wrapper over api.py                                SPEC §12
