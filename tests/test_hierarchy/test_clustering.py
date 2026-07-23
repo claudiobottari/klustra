@@ -239,3 +239,19 @@ class TestEdgeCases:
         assert len(result.assignments) == len(pages)
         for a in result.assignments:
             assert a.entity_id in [p.entity_id for p in pages]
+
+
+def test_umap_random_state_warning_does_not_leak_into_output() -> None:
+    """UMAP warns that random_state disables its parallelism. We set it on
+    purpose for reproducible clustering, so the notice is not actionable — and
+    it used to land in the middle of CLI progress output on every run."""
+    import warnings
+
+    pages = _make_separable_pages()
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        cluster_pages(pages, ClusterableEmbeddingProvider(dim=64, noise=0.02), min_cluster_size=3)
+
+    leaked = [w for w in caught if "overridden to 1 by setting random_state" in str(w.message)]
+    assert not leaked, f"UMAP noise leaked: {[str(w.message) for w in leaked]}"

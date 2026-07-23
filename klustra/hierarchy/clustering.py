@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import warnings
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -75,7 +76,17 @@ def _reduce_umap(
         metric="cosine",
         random_state=42,
     )
-    return reducer.fit_transform(embeddings)  # type: ignore[no-any-return]
+    with warnings.catch_warnings():
+        # random_state is set deliberately — reproducible clustering is worth
+        # more than UMAP's parallelism, and the run is already single-threaded.
+        # Nothing actionable, and it lands mid-progress-output on every run.
+        warnings.filterwarnings(
+            "ignore",
+            message=r"n_jobs value .* overridden to 1 by setting random_state",
+            category=UserWarning,
+            module="umap",
+        )
+        return reducer.fit_transform(embeddings)  # type: ignore[no-any-return]
 
 
 def _cluster_hard(
