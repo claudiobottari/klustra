@@ -509,6 +509,11 @@ class Klustra:
 
         logger.info("[hierarchy] starting: %d concept(s), full=%s", len(concept_records), full)
 
+        # Resolve LLM config up front: a config error must not surface only
+        # after the embedding + clustering work has already been paid for.
+        hierarchy_config = self._build_hierarchy_config()
+        incremental_config = self._build_incremental_config()
+
         if not full and prev is not None:
             changed, added, removed = self._diff_ids(nodes, prev)
             drift_count = len(changed) + len(added) + len(removed)
@@ -532,7 +537,7 @@ class Klustra:
                     cluster_summaries=prev.cluster_summaries,
                     old_embeddings=prev.page_embeddings,
                     new_embeddings=new_embeddings,
-                    config=self._build_incremental_config(),
+                    config=incremental_config,
                     provider=self.provider,
                     sink=self._sink,
                     prompts=prompts,
@@ -546,7 +551,7 @@ class Klustra:
             nodes=nodes,
             embedding_provider=self.embedding_provider,
             llm_provider=self.provider,
-            config=self._build_hierarchy_config(),
+            config=hierarchy_config,
             sink=self._sink,
             run_id=run_id,
             cache=cache,
@@ -721,14 +726,37 @@ class Klustra:
             level=record.level,
         )
 
+    def _resolve_role_model(self, role: str) -> tuple[str, int | None]:
+        """Model + retry budget for an optional LLM role.
+
+        Falls back to [llm.extraction] because `self.provider` IS the client
+        built from [llm.extraction] — its model is the one guaranteed to be
+        valid on that client. Never returns a placeholder: a sentinel here
+        reaches the provider as a literal model id and 400s.
+        """
+        from klustra.core.errors import ConfigError
+
+        cfg: LLMRoleConfig | None = getattr(self.config.llm, role, None)
+        if cfg is not None:
+            return cfg.model, cfg.retry_attempts
+
+        fallback = self.config.llm.extraction
+        if fallback is None:
+            raise ConfigError(
+                f"No model configured for the {role!r} role: add an [llm.{role}] "
+                f"section to klustra.toml (or an [llm.extraction] section to fall "
+                f"back to)."
+            )
+        logger.info(
+            "[hierarchy] no [llm.%s] section — falling back to [llm.extraction] model %r",
+            role,
+            fallback.model,
+        )
+        return fallback.model, fallback.retry_attempts
+
     def _build_hierarchy_config(self) -> HierarchyConfig:
         h = self.config.hierarchy
-        model = "default"
-        retry_attempts = None
-        hier_cfg = self.config.llm.hierarchy
-        if hier_cfg is not None:
-            model = hier_cfg.model
-            retry_attempts = hier_cfg.retry_attempts
+        model, retry_attempts = self._resolve_role_model("hierarchy")
         return HierarchyConfig(
             mode=h.mode,
             min_cluster_size=h.min_cluster_size,
@@ -741,12 +769,7 @@ class Klustra:
 
     def _build_incremental_config(self) -> IncrementalConfig:
         h = self.config.hierarchy
-        judge_model = "default"
-        judge_retry_attempts = None
-        judge_cfg = self.config.llm.judge
-        if judge_cfg is not None:
-            judge_model = judge_cfg.model
-            judge_retry_attempts = judge_cfg.retry_attempts
+        judge_model, judge_retry_attempts = self._resolve_role_model("judge")
         return IncrementalConfig(
             materiality_threshold=h.materiality_threshold,
             drift_threshold_percent=h.drift_threshold_percent,
