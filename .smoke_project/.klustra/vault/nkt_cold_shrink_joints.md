@@ -1,0 +1,5 @@
+NKT cold-shrink joints are pre‑assembled high‑voltage cable accessories designed for the voltage range 66 kV to 170 kV. They are [cold‑shrink](https://en.wikipedia.org/wiki/Cold_shrink) devices, meaning they are installed by removing a supporting core that allows the elastomeric sleeve to contract onto the cable, eliminating the need for heat during installation. These joints are listed on the approved supplier list for [[high_voltage_cable_systems]] components and are used to connect two cable lengths in a [[hv_cable_jointing_requirements|jointing installation]].
+
+As an approved [[accessory_suppliers_hv_cables|accessory supplier]], NKT’s cold‑shrink joints are recognised for use in [[high_voltage_cable_systems]] where reliable, factory‑assembled joints are required. The 66–170 kV range covers many medium‑ and high‑voltage transmission and distribution applications.
+
+^[66fee6e56f742178]

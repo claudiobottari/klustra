@@ -1,0 +1,3 @@
+The reliability of high-voltage cable systems depends critically on the quality of conductor materials. Approved suppliers must meet stringent international standards such as IEC 60228 for aluminium and EN 13601 for copper. This cluster brings together key suppliers of conductor rod for HV cables.
+
+[[conductor_suppliers_hv_cables]] serves as the overarching page listing approved suppliers. Two specific suppliers are detailed: [[norsk_hydro_aluminium_rod]] provides aluminium rod certified to IEC 60228, while [[aurubis_copper_rod]] supplies oxygen-free copper rod certified to EN 13601. Together, these pages form a comprehensive reference for sourcing conductor materials in high-voltage cable manufacturing.

@@ -1,0 +1,5 @@
+This cluster focuses on the critical materials used for insulating high-voltage (HV) cables. The primary material is crosslinkable polyethylene (XLPE), which must meet stringent purity and performance standards to withstand high electrical stresses. The cluster includes a general overview of approved [[insulation_compound_suppliers_hv_cables]] and two specific, industry-recognized compounds.
+
+The two key compounds detailed here are [[borealis_visico_le4253_xlpe]] from Borealis and [[dow_hfda_4202_ec_xlpe]] from Dow Chemical. Both are peroxide-crosslinkable XLPE compounds designed for extra-clean insulation layers. They are approved for use in high-voltage cable systems, ensuring reliability and long service life.
+
+Together, these members represent the core approved materials and suppliers for HV cable insulation, providing a foundation for understanding material selection in power cable manufacturing.

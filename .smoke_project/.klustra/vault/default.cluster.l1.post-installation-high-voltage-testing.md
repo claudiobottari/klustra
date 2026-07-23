@@ -1,0 +1,5 @@
+This cluster covers **post-installation high-voltage testing** for cable systems, focusing on two complementary procedures that verify insulation and sheath integrity before commissioning.
+
+Both [[high_voltage_withstand_test]] and [[sheath_integrity_test]] are performed after cable installation to detect defects that could lead to failure under normal operating conditions. The high voltage withstand test applies a voltage above the rated level to confirm the main insulation can withstand electrical stress, while the sheath integrity test specifically checks the metallic sheath or screen using a 10 kV DC application for one minute.
+
+Together, these tests provide a comprehensive assessment of a cable system's electrical and mechanical integrity. Passing both is typically required before a high-voltage cable is placed into service, ensuring safety and reliability from the start of its operational life.

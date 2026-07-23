@@ -1,1 +1,0 @@
-Cable lubricant is applied during [[installation.duct.installation]] to reduce friction and protect the cable outer sheath. It must be chemically compatible with the [[outer.protective.jacket]] material.^[8913d160a82c281a:duct]

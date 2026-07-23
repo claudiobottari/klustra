@@ -1,0 +1,5 @@
+This cluster brings together three interconnected pages that form the core of high-voltage (HV) cable system knowledge. The central page, [[high_voltage_cable_systems]], provides a comprehensive overview of these systems, including their key components and typical applications. It serves as the entry point for understanding the technology.
+
+Delving deeper, [[cable_core_components]] breaks down the physical structure of an HV cable, describing the conductor, semi-conductive screens, XLPE insulation, metallic sheath, and outer jacket. This page is essential for understanding how the cable is engineered to handle high voltages and environmental stresses.
+
+Finally, [[hv_cable_applications]] explores the real-world contexts where these cables are deployed, such as underground urban networks, submarine crossings, and offshore wind farm connections. This page connects the technical design to practical use cases, highlighting the importance of installation considerations like bending radius and thermal management.

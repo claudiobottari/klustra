@@ -1,0 +1,5 @@
+High-voltage cables require specialized materials and rigorous quality control. The two clusters in this group focus on approved suppliers for the most essential components: conductors and sheathing. [[default.cluster.l1.approved-conductor-suppliers-hv-cables]] covers suppliers of aluminium and copper rod, the core conductive elements. [[default.cluster.l1.sheathing-suppliers-hv-cables]] covers suppliers of radial moisture barrier materials, including HDPE compounds and aluminium-polyethylene laminate tapes, which protect the cable from environmental degradation.
+
+Together, these clusters form a critical part of the supply chain for high-voltage cable manufacturing. Approved suppliers are vetted for material consistency, mechanical performance, and compliance with industry standards. By grouping conductor and sheathing suppliers under a common theme, this cluster enables efficient sourcing and quality assurance for cable projects.
+
+The relationship between the two is complementary: conductors provide electrical performance, while sheathing ensures long-term durability. Both are indispensable for reliable high-voltage cable systems.
