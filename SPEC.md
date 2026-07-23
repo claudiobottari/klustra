@@ -379,8 +379,14 @@ The ranking boost for cluster/home pages is not klustra's responsibility (it dep
 [llm.librarian]    provider="openrouter" model="deepseek/deepseek-v4-pro"
 [llm.hierarchy]    provider="anthropic"  model="claude-sonnet-4-6"
 [llm.judge]        provider="openrouter" model="deepseek/deepseek-v4-flash"
-[llm.embeddings]   provider="openai"     model="text-embedding-3-small"
+[llm.embeddings]   provider="openrouter" model="openai/text-embedding-3-small"
 ```
+
+**Provider routing is one table for every role.** `llm/provider.py::OPENAI_COMPATIBLE_PROVIDERS` maps provider name → default `base_url`; `resolve_base_url(provider, base_url)` prefers explicit config and falls back to that default. Both chat completions (`resolve_provider`) and embeddings (`resolve_embedding_provider`) go through it, so adding a provider is a dict entry, never a new branch. An unlisted provider is still usable by setting `base_url` explicitly — the escape hatch for self-hosted OpenAI-compatible gateways. Embedding model strings on OpenRouter are provider-prefixed (`openai/text-embedding-3-small`, `qwen/qwen3-embedding-8b`).
+
+Embeddings are never streamed: `embeddings.create` returns the complete `data` list in one response, so the embed path passes no `stream` argument and reads the batch directly.
+
+**Known limitation:** only `llm.embeddings` currently resolves its own client from its own `.provider`/`.base_url`. The `librarian`, `hierarchy` and `judge` roles still borrow the single client built from `llm.extraction`, so a per-role `provider` there is read for `.model` only — configuring `llm.hierarchy` on a different provider is silently ignored (STATUS.md gap #9 / wiring nuance).
 
 Retry with backoff (default 3), rate limiting, structured output via JSON schema (tool-use where supported, otherwise response_format).
 

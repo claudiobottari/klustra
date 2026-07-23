@@ -31,7 +31,7 @@ pytest test_golden.py   -> 1 passed (mini-corpus -> golden OKF bundle, end-to-en
 | `engine/` (extraction, librarian, validate, lint, dependency) | Yes | Yes | Yes — `compile`, `validate`, `lint` |
 | `linking/` (resolver, link_graph) | Yes | Yes | Yes — invoked from `engine/librarian.py` post-generation |
 | `hierarchy/` (clustering, pages, incremental, stability, context) | Yes | Yes | Yes — `build_hierarchy`, `context`/`navigate`/`search` |
-| `hierarchy/embeddings.py` | **ABC only** — no concrete `EmbeddingProvider` implementation exists anywhere | N/A | **No** — CLI never constructs one from `llm.embeddings` in `klustra.toml`; must be passed manually to `Klustra(embedding_provider=...)` in library use |
+| `hierarchy/embeddings.py` | `OpenAICompatibleEmbeddingProvider` — any OpenAI-compatible `/embeddings` endpoint (OpenAI, OpenRouter, self-hosted) | Yes | Yes — `Klustra.embedding_provider` builds one from `[llm.embeddings]`; `base_url` resolves through the shared `OPENAI_COMPATIBLE_PROVIDERS` table, same as the chat roles |
 | `exporters/` | `obsidian` + `okf_bundle` only | Yes (for those two) | Yes |
 | `exporters/` — `html` | **Not implemented** (SPEC §15 lists it under v0.2) | — | — |
 | `exporters/` — `delta` | Not implemented (v1.0 roadmap item, expected absent) | — | — |
@@ -44,6 +44,8 @@ pytest test_golden.py   -> 1 passed (mini-corpus -> golden OKF bundle, end-to-en
 
 `Klustra.provider` (`api.py`) resolves and caches **one** LLM client, built only from `llm.extraction.provider`/`.base_url`. The `librarian`, `hierarchy`, and `judge` role configs are read only for their `.model` string — their `.provider`/`.base_url` fields are declared but currently inert. Fine as long as all LLM roles share one provider (the common case); silently wrong if you configure a role on a different provider (e.g. `llm.hierarchy` on `anthropic` while `llm.extraction` is `openrouter` — the hierarchy call would still go through the OpenRouter client).
 
+`llm.embeddings` is the exception: it resolves its own client from its own `.provider`/`.base_url` (see gap #9). Fixing the remaining roles means giving `Klustra` a per-role provider cache keyed on `(provider, base_url, timeout_seconds)` rather than a single `self._provider` — the resolution helpers (`resolve_base_url`, `resolve_provider`) are already generic enough to support it.
+
 ## Gap list (priority order)
 
 1. **`docs/wiki/` not yet populated.** CLAUDE.md's own progressive-disclosure model and "wiki is the memory" convention depend on it dogfooding itself; it doesn't exist yet.
@@ -54,7 +56,7 @@ pytest test_golden.py   -> 1 passed (mini-corpus -> golden OKF bundle, end-to-en
 6. **Domain webhook stub absent.** SPEC §4.4 asks for a pass-through `klustra webhook serve` stub (contract only); not present.
 7. **Accounting record narrower than SPEC §9** — missing `run_id` and `cost_estimate`, so per-run cost breakdowns aren't derivable from `klustra stats` yet.
 8. **No Google LLM provider** (SPEC §8 lists OpenAICompatible/Anthropic/Google) — only OpenAI-compatible, Anthropic, and Mock exist.
-9. **No concrete `EmbeddingProvider` implementation**, and the CLI doesn't wire `llm.embeddings` config into one even once it exists — currently a library-only concern (see module table above).
+9. ~~**No concrete `EmbeddingProvider` implementation**, and the CLI doesn't wire `llm.embeddings` config into one.~~ **RESOLVED for embeddings.** `OpenAICompatibleEmbeddingProvider` exists, is built from `[llm.embeddings]`, and resolves `base_url` through the same `OPENAI_COMPATIBLE_PROVIDERS` table as the chat roles — `provider = "openrouter"` (and any OpenAI-compatible endpoint via explicit `base_url`) now works. **The general base_url-propagation gap remains open** for the other roles — see the wiring nuance above: `librarian`/`hierarchy`/`judge` still borrow the client built from `llm.extraction`, so their `.provider`/`.base_url` stay inert. Embeddings is now the *only* role that resolves its own client from its own config.
 10. *(found while writing this doc)* **`engine/dependency.py` (SPEC §5 dependency resolution) is built and unit-tested but never called from `api.py::compile()`.** `compile()` re-translates and re-extracts every tracked source on every call — there is no reverse-index-based incremental re-extraction today, despite `ChangeSet` existing and the machinery for it being present.
 
 Everything else audited against SPEC §4–§7 (translators, two-phase compile, hierarchy recursion/incrementality/stability, context API) is implemented and covered by tests, not just scaffolded.

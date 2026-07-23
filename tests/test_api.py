@@ -6,7 +6,7 @@ import pytest
 
 from klustra.api import Klustra
 from klustra.core.errors import ConfigError, LLMKeyMissingError
-from klustra.hierarchy.embeddings import EmbeddingProvider, OpenAIEmbeddingProvider
+from klustra.hierarchy.embeddings import EmbeddingProvider, OpenAICompatibleEmbeddingProvider
 
 
 class _FakeEmbedder(EmbeddingProvider):
@@ -40,7 +40,7 @@ class TestEmbeddingProviderWiring:
         first = nx.embedding_provider
         second = nx.embedding_provider
 
-        assert isinstance(first, OpenAIEmbeddingProvider)
+        assert isinstance(first, OpenAICompatibleEmbeddingProvider)
         assert first.model == "text-embedding-3-small"
         assert first is second  # constructed once, cached thereafter
 

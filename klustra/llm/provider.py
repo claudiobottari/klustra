@@ -5,6 +5,29 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
+OPENAI_COMPATIBLE_PROVIDERS: dict[str, str | None] = {
+    "openai": "https://api.openai.com/v1",
+    "openrouter": "https://openrouter.ai/api/v1",
+    "databricks": None,  # workspace-specific — base_url must be configured
+}
+"""Provider name → default base_url for the OpenAI-compatible wire format.
+
+Single source of truth for *every* role: chat completions and embeddings both
+resolve through `resolve_base_url`, so a provider added here works for both.
+Adding one is a dict entry, never a new branch.
+"""
+
+
+def resolve_base_url(provider: str, base_url: str | None = None) -> str | None:
+    """Explicit config wins; otherwise the provider's known default (may be None)."""
+    return base_url or OPENAI_COMPATIBLE_PROVIDERS.get(provider)
+
+
+def supported_providers_hint() -> str:
+    """Comma-separated provider names, for error messages."""
+    return ", ".join(repr(name) for name in sorted(OPENAI_COMPATIBLE_PROVIDERS))
+
+
 DEFAULT_TIMEOUT_SECONDS = 120.0
 """Client-side per-request timeout (SPEC §8). The SDK default is 600s with 2
 silent internal retries; that is 30 minutes of no output per attempt."""

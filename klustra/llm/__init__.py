@@ -5,10 +5,13 @@ from klustra.llm.openai_provider import OpenAICompatibleProvider
 from klustra.llm.prompts import PromptRegistry
 from klustra.llm.provider import (
     DEFAULT_TIMEOUT_SECONDS,
+    OPENAI_COMPATIBLE_PROVIDERS,
     LLMMessage,
     LLMProvider,
     LLMRequest,
     LLMResponse,
+    resolve_base_url,
+    supported_providers_hint,
 )
 from klustra.llm.retry import DEFAULT_MAX_ATTEMPTS, llm_retry
 
@@ -17,6 +20,7 @@ __all__ = [
     "AnthropicProvider",
     "DEFAULT_MAX_ATTEMPTS",
     "DEFAULT_TIMEOUT_SECONDS",
+    "OPENAI_COMPATIBLE_PROVIDERS",
     "LLMMessage",
     "LLMProvider",
     "LLMRequest",
@@ -28,16 +32,10 @@ __all__ = [
     "PromptRegistry",
     "TokenRecord",
     "llm_retry",
+    "resolve_base_url",
     "resolve_provider",
+    "supported_providers_hint",
 ]
-
-
-_OPENAI_COMPATIBLE_PROVIDERS = {"openai", "openrouter", "databricks"}
-
-_BASE_URLS: dict[str, str] = {
-    "openai": "https://api.openai.com/v1",
-    "openrouter": "https://openrouter.ai/api/v1",
-}
 
 
 def resolve_provider(
@@ -60,12 +58,13 @@ def resolve_provider(
             f"Set {provider_name.upper()}_API_KEY environment variable."
         )
 
-    if provider_name in _OPENAI_COMPATIBLE_PROVIDERS:
-        url = base_url or _BASE_URLS.get(provider_name)
-        return OpenAICompatibleProvider(api_key=key, base_url=url, timeout_seconds=timeout_seconds)
-
     if provider_name == "anthropic":
         return AnthropicProvider(api_key=key, timeout_seconds=timeout_seconds)
 
-    url = base_url or _BASE_URLS.get(provider_name)
-    return OpenAICompatibleProvider(api_key=key, base_url=url, timeout_seconds=timeout_seconds)
+    # Everything else speaks the OpenAI wire format. An unknown name is allowed
+    # through as the escape hatch for a self-hosted endpoint via base_url.
+    return OpenAICompatibleProvider(
+        api_key=key,
+        base_url=resolve_base_url(provider_name, base_url),
+        timeout_seconds=timeout_seconds,
+    )

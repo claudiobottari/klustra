@@ -336,3 +336,49 @@ class TestHierarchyCli:
         result = runner.invoke(app, ["hierarchy", "--full"])
         assert result.exit_code == 0, result.output
         assert "Built" in result.output and "page(s)" in result.output
+
+
+class TestEmbeddingsProviderRouting:
+    """Gap #9 (embeddings instance): the embed step must work end-to-end when
+    [llm.embeddings] names a non-OpenAI provider, resolved from config rather
+    than injected by the caller."""
+
+    def test_hierarchy_builds_with_openrouter_embeddings_config(
+        self, hierarchy_project: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from unittest.mock import MagicMock, patch
+
+        monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+        toml = hierarchy_project / "klustra.toml"
+        toml.write_text(
+            toml.read_text(encoding="utf-8")
+            + '\n[llm.embeddings]\nprovider = "openrouter"\n'
+            + 'model = "openai/text-embedding-3-small"\n',
+            encoding="utf-8",
+        )
+
+        # No embedding_provider injected — it must come from config.
+        provider = _HierarchyMockProvider()
+        nx = Klustra(root=hierarchy_project, provider=provider)
+        _ingest_and_compile(nx, hierarchy_project / "corpus")
+
+        reference = _GroupEmbedder()
+
+        def _fake_create(*, model: str, input: list[str]) -> MagicMock:  # noqa: A002
+            assert model == "openai/text-embedding-3-small"
+            response = MagicMock()
+            response.data = []
+            for vector in reference.embed(input):
+                item = MagicMock()
+                item.embedding = vector
+                response.data.append(item)
+            return response
+
+        embedder = nx.embedding_provider
+        assert str(embedder._client.base_url).rstrip("/") == "https://openrouter.ai/api/v1"  # type: ignore[attr-defined]
+
+        with patch.object(embedder._client.embeddings, "create", side_effect=_fake_create):  # type: ignore[attr-defined]
+            result = nx.build_hierarchy(full=True)
+
+        assert any(p.type == "home" for p in result.pages)
+        assert any(p.type == "cluster" for p in result.pages)

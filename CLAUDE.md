@@ -80,6 +80,7 @@ klustra/cli.py        typer CLI — thin wrapper over api.py, no logic here
 - New translator = subclass `Translator` + register + fixture file + golden expected units. Nothing else should change — if adding a format forces edits outside `translators/` and its tests, the design broke; stop and discuss.
 - Same rule for sources: new `SourceConnector` (e.g. SharePoint, blob) = one class + a new `type` value in domain TOML. Never touch `DomainRegistry`, `engine/`, or `hierarchy/` to add a connector — v0.1 ships only `LocalFolderConnector`, but the seam must already be clean (SPEC §4.4).
 - Prompts are Jinja2 `.md` files in `klustra/llm/prompts/`, never f-strings in code — `PromptRegistry.render(role, kind=...)` is the only source of prompt text. Naming: `<role>[.<kind>][.<version>].md` with fallback (SPEC §10). Templates use `StrictUndefined`, so a missing variable raises. Changing a prompt = changing behavior = update golden tests (`tests/fixtures/prompts/`).
+- Provider routing (chat AND embeddings) resolves `base_url` through the single `OPENAI_COMPATIBLE_PROVIDERS` table in `llm/provider.py`. Adding a provider = one dict entry, never a new `elif` in a role-specific resolver (SPEC §8).
 - Commits: conventional commits (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`). One logical change per commit.
 
 ## Working style (Karpathy mode)

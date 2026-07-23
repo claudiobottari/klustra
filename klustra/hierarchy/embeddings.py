@@ -8,7 +8,12 @@ import openai
 
 from klustra.core.config import LLMRoleConfig
 from klustra.core.errors import ConfigError, LLMKeyMissingError, LLMTimeoutError
-from klustra.llm.provider import DEFAULT_TIMEOUT_SECONDS
+from klustra.llm.provider import (
+    DEFAULT_TIMEOUT_SECONDS,
+    OPENAI_COMPATIBLE_PROVIDERS,
+    resolve_base_url,
+    supported_providers_hint,
+)
 
 
 class EmbeddingProvider(ABC):
@@ -23,8 +28,14 @@ class EmbeddingProvider(ABC):
         ...
 
 
-class OpenAIEmbeddingProvider(EmbeddingProvider):
-    """Concrete EmbeddingProvider backed by the OpenAI embeddings API (SPEC §8, §12)."""
+class OpenAICompatibleEmbeddingProvider(EmbeddingProvider):
+    """EmbeddingProvider for any OpenAI-compatible /embeddings endpoint (SPEC §8, §12).
+
+    OpenAI, OpenRouter and self-hosted gateways share the same request/response
+    shape, so the only thing that varies is `base_url` — the same routing the
+    chat roles get from `resolve_base_url`. Embeddings are never streamed:
+    `embeddings.create` returns the complete `data` list in one response.
+    """
 
     def __init__(
         self,
@@ -58,26 +69,37 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
 def resolve_embedding_provider(cfg: LLMRoleConfig) -> EmbeddingProvider:
     """Build a concrete EmbeddingProvider from an [llm.embeddings] config section.
 
+    Any OpenAI-compatible provider works (SPEC §8) — resolution goes through the
+    same OPENAI_COMPATIBLE_PROVIDERS table the chat roles use, so `openrouter`
+    and friends need no branch here. An unlisted provider is still accepted when
+    an explicit base_url is given, which is the escape hatch for self-hosted
+    endpoints.
+
     Secrets stay in env only (SPEC §12) — resolved via resolve_api_key, never read
     from klustra.toml. Raises LLMKeyMissingError (not a silent None) if the env var
     for the configured provider is unset.
     """
     from klustra.core.config import resolve_api_key
 
-    if cfg.provider != "openai":
+    base_url = resolve_base_url(cfg.provider, cfg.base_url)
+    if base_url is None and cfg.provider not in OPENAI_COMPATIBLE_PROVIDERS:
         raise ConfigError(
-            f"Unsupported embeddings provider {cfg.provider!r} — only 'openai' is implemented"
+            f"Unsupported embeddings provider {cfg.provider!r}. "
+            f"Supported: {supported_providers_hint()}. "
+            f"Any other OpenAI-compatible endpoint works too — set "
+            f"[llm.embeddings] base_url explicitly."
         )
 
     key = resolve_api_key(cfg.provider)
     if not key:
         raise LLMKeyMissingError(
-            "No API key for embeddings provider 'openai'. Set OPENAI_API_KEY environment variable."
+            f"No API key for embeddings provider {cfg.provider!r}. "
+            f"Set {cfg.provider.upper()}_API_KEY environment variable."
         )
-    return OpenAIEmbeddingProvider(
+    return OpenAICompatibleEmbeddingProvider(
         api_key=key,
         model=cfg.model,
-        base_url=cfg.base_url,
+        base_url=base_url,
         timeout_seconds=cfg.timeout_seconds,
     )
 
